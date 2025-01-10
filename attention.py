@@ -277,11 +277,15 @@ torch.manual_seed(123)
 # this is only for demonstration, it is not always true
 context_length = batch.shape[1]
 # dropout rate = 0.0
+d_out=2
 ca = CausalAttention(d_in, d_out, context_length, 0,0)
 
 context_vecs = ca(batch)
 print(context_vecs)
 print(f'context_vecs shape:{context_vecs.shape}')
+
+
+
 
 
 # extend single head to multihead
@@ -341,12 +345,17 @@ class MultiHeadAttention(nn.Module):
         queries = self.W_query(x)
         values = self.W_value(x)
 
+        # split weights
         keys = keys.view(b, num_tokens, self.num_heads, self.head_dim)
         values = values.view(b, num_tokens, self.num_heads, self.head_dim)
         queries = queries.view(b, num_tokens, self.num_heads, self.head_dim)
         # optional, to help understand the transformation
         print(f'#1 qkv matrices like:\n{keys}')
 
+        # compare below to old method: attn_scores = queries@keys.transpose(1,2)
+        # dim1 and dim2 of old methods are in fact the dim2 and dim3 of current method
+        # Transpose: (b, num_tokens, num_heads, head_dim) -> (b, num_heads, num_tokens, head_dim)
+        # easy to understand why we need to transpose dim1 dim2: remember in old method, within each head, the 2 dims involved in matrix multiplication are (num_tokens, head_dim)
         keys = keys.transpose(1,2)
         values = values.transpose(1,2)
         queries = queries.transpose(1,2)
@@ -372,6 +381,8 @@ class MultiHeadAttention(nn.Module):
         return context_vec
 
 
+
+
 # test
 #%%
 torch.manual_seed(123)
@@ -380,14 +391,25 @@ d_out=4 # 书上用的是2，但其实不正确
 mha = MultiHeadAttention(d_in, d_out, context_length, 0.0, num_heads=2)
 context_vecs = mha(batch)
 print(context_vecs)
-
+mha.W_key(batch).view(2,6,2,2).transpose(1,2).shape
 '''
 注意，虽然两种计算多头注意力的方法非常相似，只是第二种用了一种更加高效的方法去计算，但实际上，因为二者初始化的nn.Linear的shape不同，而nn.Linear的初始化是具有随机性的，因此二者最后的计算结果也不同
 '''
 
 
 #%%
+# 思考与验证
 torch.manual_seed(123)
 tmp = nn.Linear(4,4)
 tmp.weight
+# 把最后一个维度split成2x2
+tmp.weight.view(4,2,2)
+#注意观察最后生成的tensor，是4个2x2的矩阵组成的一列
+'''
+那么上面的multiheadattn的维度是怎么转换怎么split的呢？
+观察，一开始初始化的W_q/W_k/W_v的维度都是(d_in, d_out)，接着我们把d_out分拆成了
+head_dim = d_out//num_heads -> d_out = head_dim*num_heads，而num_heads=2，d_out=4，因此head_dim=2，也就是说，每个head最后生成的context_vecs的列数是2，这正好和老方法的输入维度相对应。
+
+由此我们可以得出，老方法的输入shape为(2,6,2)，最后2个head的输出结果concat在一起，输出context_vec的shape是(2,6,4)，因为新老等价，而新方法的初始矩阵的形状是(2,6,4)，我们需要把最后一维split开，变成了(2,6,2,2)，把多出来的一维num_heads和num_tokens交换，得到(2,2,6,2)，由4变成2x2:head 1 (2,6,2), head 2 (2,6,2)，同时对这两个heads做运算，运算方法和老的计算方法一样。这里之所以要进行transpose(1,2)就是因为split的动作会多出一个维度num_heads并且这个维度出现在我们不需要的位置上，我们真正要进行矩阵乘法运算的维度和老方法一样，都是(6,2)(对应(num_tokens,head_dim)，其中head_dim又是单头里面的d_out)。第二次transpose(2,3)等价于牢房里面的.transpose(1,2)，矩阵乘法右边的那个矩阵的最后两个维度转置，这才能做乘法。
+'''
 # %%
