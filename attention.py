@@ -223,3 +223,171 @@ attn_weights = torch.softmax(masked/keys.shape[-1]**0.5, dim=1)
 '''
 
 # %%
+# Combining dropouts:
+torch.manual_seed(123)
+# initializatino, setting dropout rate
+dropout = torch.nn.Dropout(0.5)
+example = torch.ones(6,6)
+print(dropout(example))
+
+torch.manual_seed(123)
+print(dropout(attn_weights))
+
+# adapt attention class to mini batch
+batch = torch.stack((inputs,inputs), dim = 0)
+print(batch.shape)
+
+
+# full causal attention
+class CausalAttention(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, qkv_bias=False):
+        super().__init__()
+        self.d_out = d_out
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.dropout = nn.Dropout(dropout)
+        # make sure all params run in same device
+        self.register_buffer('mask', torch.triu(torch.ones(context_length, context_length), diagonal=1))
+
+    def forward(self, x):
+        b, num_tokens, d_in = x.shape
+        keys = self.W_key(x)
+        queries = self.W_query(x)
+        values = self.W_value(x)
+
+        attn_scores = queries@keys.transpose(1,2) #transpose dim1 and dim2
+        #note that masked_fill_ with a trailing _, this is to avoid unnecessay memory copies
+
+        # why [:num_tokens, :num_tokens]?
+        # Original mask truncated to the number of tokens and converted to boolean, because num of tokens not necessarily = context_length
+
+        # remember that in gpt2, context_length=1024, context_length is related to RAM consumption so it has to be considered carefully.
+        attn_scores.masked_fill_(self.mask.bool()[:num_tokens, :num_tokens], -torch.inf)
+
+        attn_weights = torch.softmax(attn_scores/keys.shape[-1]**0.5, dim=-1)
+
+        attn_weights = self.dropout(attn_weights)
+
+        context_vec = attn_weights@values
+        return context_vec
+    
+torch.manual_seed(123)
+# here we set context_length to be the num_of_tokens, keep in mind that
+# this is only for demonstration, it is not always true
+context_length = batch.shape[1]
+# dropout rate = 0.0
+ca = CausalAttention(d_in, d_out, context_length, 0,0)
+
+context_vecs = ca(batch)
+print(context_vecs)
+print(f'context_vecs shape:{context_vecs.shape}')
+
+
+# extend single head to multihead
+class MultiHeadAttentionWrapper(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+        super().__init__()
+        # simply stack num_heads CausalAttention
+        self.heads = nn.ModuleList([CausalAttention(d_in, d_out, context_length, dropout, qkv_bias) for _ in range(num_heads)])
+
+    def forward(self, x):
+        # pass x to num_heads of CausalAttention then stack the results
+        return torch.cat([head(x) for head in self.heads], dim=-1)
+
+#%%
+# test multihead
+torch.manual_seed(123)
+context_length = batch.shape[1] # set it to number of tokens for simplicity
+d_in, d_out = 3, 2
+
+mha = MultiHeadAttentionWrapper(d_in, d_out, context_length, 0.0, num_heads=2)
+context_vecs = mha(batch)
+
+print(context_vecs)
+# print(f'context_vecs shape: {context_vecs.shape}')
+
+
+# context_vecs.view(2,6,2,2).shape
+# tmp = nn.Linear(2,2)
+# tmp(context_vecs.view(2,6,2,2)).view(2,6,4)
+# context_vecs.contiguous().view()
+
+#%%
+'''
+the following MultiHeadAttention class integrates the multi-head functionality within a single class.
+'''
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+        super().__init__()
+        assert (d_out%num_heads == 0), "d_out must be divisable by num_heads"
+
+        self.d_out = d_out
+        self.num_heads = num_heads
+        # reason of using '//': since before we have already ensure d_out must be divisable by n_heads, using // instead of / make sure the result be integer. try comparing the difference of 10//2 and 10/2
+        self.head_dim = d_out//num_heads
+        self.W_query = nn.Linear(d_in, d_out, bias = qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias = qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias = qkv_bias)
+        # this projection layer is not necessary, but for completeness*
+        self.out_proj = nn.Linear(d_out, d_out)
+        self.dropout = nn.Dropout(dropout)
+        self.register_buffer('mask', torch.triu(torch.ones(context_length, context_length), diagonal=1))
+    
+    def forward(self, x):
+        b, num_tokens, d_in = x.shape
+        keys = self.W_key(x)
+        queries = self.W_query(x)
+        values = self.W_value(x)
+
+        keys = keys.view(b, num_tokens, self.num_heads, self.head_dim)
+        values = values.view(b, num_tokens, self.num_heads, self.head_dim)
+        queries = queries.view(b, num_tokens, self.num_heads, self.head_dim)
+        # optional, to help understand the transformation
+        print(f'#1 qkv matrices like:\n{keys}')
+
+        keys = keys.transpose(1,2)
+        values = values.transpose(1,2)
+        queries = queries.transpose(1,2)
+        # print(f'#2 shape of qkv after transpose:\n{keys.shape}')
+
+        attn_scores = queries@keys.transpose(2,3)
+        # print(f'#3 attn_scores:\n{attn_scores}')
+        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
+
+        attn_scores.masked_fill_(mask_bool, -torch.inf)
+        # print(f'#4 masked attn_scores:\n{attn_scores}')
+        attn_weights = torch.softmax(attn_scores/keys.shape[-1]**0.5, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        context_vec = (attn_weights@values).transpose(1,2)
+        # print(f'#5 context_vec before merge:\n{context_vec}')
+        # contiguous make sure the memory are contiguous, for efficiency
+        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+        # print(f'#6 context_vec after merge:\n{context_vec}')
+        context_vec = self.out_proj(context_vec)
+        # print(f'#7 context_vec being out_proj:\n{context_vec}')
+
+        return context_vec
+
+
+# test
+#%%
+torch.manual_seed(123)
+batch_size, context_length, d_in = batch.shape
+d_out=4 # 书上用的是2，但其实不正确
+mha = MultiHeadAttention(d_in, d_out, context_length, 0.0, num_heads=2)
+context_vecs = mha(batch)
+print(context_vecs)
+
+'''
+注意，虽然两种计算多头注意力的方法非常相似，只是第二种用了一种更加高效的方法去计算，但实际上，因为二者初始化的nn.Linear的shape不同，而nn.Linear的初始化是具有随机性的，因此二者最后的计算结果也不同
+'''
+
+
+#%%
+torch.manual_seed(123)
+tmp = nn.Linear(4,4)
+tmp.weight
+# %%
