@@ -155,3 +155,18 @@ for i in range(len(x)):
 
 print('Accuracy:' +str(float(accuracy_cnt)/len(x)))
 
+# batch process
+x, t = get_data()
+network = init_network()
+
+batch_size=100
+accuracy_cnt = 0
+
+for i in range(0, len(x), batch_size):
+    x_batch = x[i:i+batch_size]
+    y_batch = predict(network, x_batch) # shape=(100,10)
+    p = np.argmax(y_batch, axis=1) # 取每一行的最大值的index
+    accuracy_cnt += np.sum(p==t[i:i+batch_size]) # t: truelabel
+
+print(f'accuracy: {accuracy_cnt/len(x)}')
+
