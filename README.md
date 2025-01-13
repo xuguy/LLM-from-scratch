@@ -1,6 +1,23 @@
 # LLM from scratch notes
 
-## Attentino Mechanism
+## Deep Learning related
+thoughts, codes and notes of the book 《深度学习入门：基本框架》
+\
+符号定义：$w_{12}^{(1)}$ 表示第0层（输入层）到第1层（同时也是第一层隐藏层）的参数，2表示第0层的第二个神经元，1表示第1层的第一个神经元。$b_1^{(1)}$表示计算第一层隐藏层的第一个神经元用到的偏置：\[ a_1^{(1)} = w_{11}^{(1)} x_1 + w_{12}^{(1)} x_2 + b_1^{(1)} \]
+一般地（写成矩阵形式）我们有：（注意W和X的顺序）
+\[ A^{(1)} = X W^{(1)} + B^{(1)} \]
+
+其中，\( A^{(1)} \)、\( X \)、\( B^{(1)} \)、\( W^{(1)} \) 如下所示。
+
+\[ A^{(1)} = \begin{pmatrix} a_1^{(1)} & a_2^{(1)} & a_3^{(1)} \end{pmatrix}, \quad X = \begin{pmatrix} x_1 & x_2 \end{pmatrix}, \quad B^{(1)} = \begin{pmatrix} b_1^{(1)} \\ b_2^{(1)} \\ b_3^{(1)} \end{pmatrix} \]
+
+\[ W^{(1)} = \begin{pmatrix} w_{11}^{(1)} & w_{21}^{(1)} & w_{31}^{(1)} \\ w_{12}^{(1)} & w_{22}^{(1)} & w_{32}^{(1)} \end{pmatrix} \]
+
+
+
+
+
+## Attention Mechanism
 - **notations**: **attn scores** $\omega$, **attn weight** $\alpha$
 - **attention weights**(page 66): typically calcualted by softmaxing the attention scores, and it determines the extent to which a context vector depends on the different parts of the input (i.e., to what extent the network focuses on different parts of the input) = **context**
 - **weight parameters**(page 66): aka **weight matrices** $W_k, W_q, W_v$ for example, are the fundamental, learned coefficients that define the network’s connections, while attention weights are dynamic, context-specific values. 
