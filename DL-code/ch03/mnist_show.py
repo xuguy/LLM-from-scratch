@@ -22,4 +22,3 @@ print(img.shape)  # (28, 28)
 
 img_show(img)
 
-os.curdir
