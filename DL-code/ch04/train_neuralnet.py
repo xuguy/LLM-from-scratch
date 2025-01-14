@@ -3,6 +3,7 @@ import sys, os
 sys.path.append(os.pardir)  # 为了导入父目录的文件而进行的设定
 import numpy as np
 import matplotlib.pyplot as plt
+
 from dataset.mnist import load_mnist
 from two_layer_net import TwoLayerNet
 
@@ -14,7 +15,7 @@ network = TwoLayerNet(input_size=784, hidden_size=50, output_size=10)
 iters_num = 10000  # 适当设定循环的次数
 train_size = x_train.shape[0]
 batch_size = 100
-learning_rate = 0.1
+learning_rate = 0.2
 
 train_loss_list = []
 train_acc_list = []
@@ -28,7 +29,7 @@ for i in range(iters_num):
     t_batch = t_train[batch_mask]
     
     # 计算梯度
-    #grad = network.numerical_gradient(x_batch, t_batch)
+    # grad = network.numerical_gradient(x_batch, t_batch)
     grad = network.gradient(x_batch, t_batch)
     
     # 更新参数
