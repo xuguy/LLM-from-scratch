@@ -576,5 +576,10 @@ print(f'dapple_num:{dapple_num}, dapple:{dapple}, dorange:{dorange}, dorange_num
 
 # it is crital how each layer is organize, they are ordered
 # each initialzed layer is a node, all data are saved within the instance of the class
+# 为什么要用类来实现层（节点）：因为类可以保存计算过的数据
 
-#
+# 激活层函数的实现
+
+class Relu:
+    def __init(self):
+        self.mask = None
