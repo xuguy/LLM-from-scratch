@@ -467,4 +467,114 @@ for i in range(iters_num):
 # 这里由于学习率以及batch选择的随机性问题，在前10次（甚至前100次）循环中loss下降的都不大，甚至看不出下降的趋势，程序本身并没有问题
 
 
-# %%
+# %% 
+#================ backward propogation =====================
+
+# multiply layer
+class MulLayer:
+    def __init__(self):
+        self.x = None
+        self.y = None
+
+    def forward(self, x, y):
+        self.x = x
+        self.y = y
+        out = x*y
+
+        return out
+    
+    def backward(self, dout):
+        # dout be the received partial derivative
+        dx = dout*self.y
+        dy = dout*self.x
+
+        return dx, dy
+    
+
+# test
+# input: all the elements that will affect the price of the apple
+apple = 100
+apple_num=2
+tax = 1.1
+
+# layer: 2 steps: get the number of apple, then consider tax
+# a layer = a multiply node
+mul_apple_layer = MulLayer()
+mul_tax_layer = MulLayer()
+
+# forward
+apple_price = mul_apple_layer.forward(apple, apple_num)
+price = mul_tax_layer.forward(apple_price, tax)
+
+print(price)
+
+# backward:
+# the whole price (consider number of apple and tax)
+dprice = 1
+
+# how will the other variable change
+# each mul node has 2 input and output 1 value
+dapple_price, dtax = mul_tax_layer.backward(dprice)
+dapple, dapple_num = mul_apple_layer.backward(dapple_price)
+
+print(dapple, dapple_num, dtax)
+
+
+# add layer, similar to mul layer
+
+class AddLayer:
+
+    def __init__(self):
+        pass
+
+    def forward(self, x, y):
+        out = x + y
+        return out
+    
+    def backward(self, dout):
+        dx = dout*1
+        dy = dout*1
+
+        return dx, dy
+    
+
+# test with a complicated network
+
+apple = 100
+apple_num = 2
+orange = 150
+orange_num = 3
+tax = 1.1
+
+# initialize, from graph (page 138) we can see that there are 3 mul nodes and 1 add node
+mul_apple_layer = MulLayer()
+mul_orange_layer = MulLayer()
+add_apple_orange_layer = AddLayer()
+mul_tax_layer = MulLayer()
+
+#forward
+# 1st layer
+apple_price = mul_apple_layer.forward(apple, apple_num)
+orange_price = mul_orange_layer.forward(orange, orange_num)
+
+# 2nd layer
+all_price = add_apple_orange_layer.forward(apple_price, orange_price)
+
+# 3rd layer
+price = mul_tax_layer.forward(all_price, tax)
+
+#backward
+dprice = 1
+dall_price, dtax = mul_tax_layer.backward(dprice)
+dapple_price, dorange_price = add_apple_orange_layer.backward(dall_price)
+dorange, dorange_num = mul_orange_layer.backward(dorange_price)
+dapple, dapple_num = mul_apple_layer.backward(dapple_price)
+
+print(f'price:{price}') # should be 715
+
+print(f'dapple_num:{dapple_num}, dapple:{dapple}, dorange:{dorange}, dorange_num:{dorange_num}, dtax:{dtax}')
+
+# it is crital how each layer is organize, they are ordered
+# each initialzed layer is a node, all data are saved within the instance of the class
+
+#
