@@ -580,6 +580,6 @@ print(f'dapple_num:{dapple_num}, dapple:{dapple}, dorange:{dorange}, dorange_num
 
 # 激活层函数的实现
 
-class Relu:
-    def __init(self):
-        self.mask = None
+# class Relu:
+#     def __init(self):
+#         self.mask = None
