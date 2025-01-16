@@ -579,7 +579,36 @@ print(f'dapple_num:{dapple_num}, dapple:{dapple}, dorange:{dorange}, dorange_num
 # 为什么要用类来实现层（节点）：因为类可以保存计算过的数据
 
 # 激活层函数的实现
+import numpy as np
+class Relu:
+    def __init__(self):
+        self.mask = None
 
-# class Relu:
-#     def __init(self):
-#         self.mask = None
+    def forward(self, x):
+        self.mask = (x<=0)
+        out = x.copy()
+        out[self.mask] = 0
+
+        return out
+    
+    def backward(self, dout):
+        dout[self.mask] = 0
+        dx = dout
+
+        return dx
+
+# sigmoid layer (Page 144) please revisit how this layer is constructed
+class Sigmoid:
+    def __inti__(self):
+        self.out = None
+    
+    def forward(self, x):
+        out = 1/(1+np.exp(-x))
+        self.out = out
+
+        return out
+    
+    def backward(self, dout):
+        dx = dout*(1.0 - self.out)*self.out
+
+        return dx
