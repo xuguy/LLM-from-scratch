@@ -816,3 +816,43 @@ for i in range(iters_num):
         test_acc_list.append(test_acc)
         print(f'train_acc: {train_acc:.3f}, test_acc: {test_acc:.3f}')
 
+# =================== Ch 06 =======================
+# ================= optimizaer ====================
+
+import numpy as np
+class Momentum:
+    def __init__(self, lr = 0.01, momentum = 0.9):
+        self.lr = lr
+        self.momentum = momentum # a.k.a. alpha (<1)
+        self.v = None
+
+    def update(self, params, grads):
+
+        # v会以字典型变量的形式保存与参数结构相同的数据
+        # 如果是第一次更新，那么把v的所有值全部初始化为0
+        if self.v is None:
+            self.v = {}
+            # 回忆params的结构：key-value，其中value就是各层的参数矩阵
+            for key, val in params.items():
+                self.v[key] = np.zeros_like(val)
+
+        for key in params.keys():
+            self.v[key] = self.momentum*self.v[key] - self.lr*grads[key]
+            params[key] +=self.v[key]
+
+class AdaGrad:
+    def __init__(self, lr = 0.01):
+        self.lr = lr
+        self.h = None
+
+    def update(self, params, grads):
+        if self.h is None:
+            self.h = {}
+            # h的结构和待更新参数一样
+            for key, val in params.items():
+                self.h[key] = np.zeros_like(val)
+
+        for key in params.keys():
+            #非RMSPROP
+            self.h[key] += grads[key]*grads[key]
+            params[key] -= self.lr*grads[key]/(np.sqrt.h[key] + 1e-7)
