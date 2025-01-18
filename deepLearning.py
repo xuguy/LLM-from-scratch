@@ -612,3 +612,207 @@ class Sigmoid:
         dx = dout*(1.0 - self.out)*self.out
 
         return dx
+
+# Affine层的实现
+import numpy as np
+
+X = np.random.rand(2)
+W = np.random.rand(2,3)
+B = np.random.rand(3)
+
+# Y = X@W+B : (1,3)
+# parL/parX = (parL/parY)@W^T
+# parL/parW = X^T@(parL/parY)
+# 注意 一维向量(R,)既可以左乘（作为行向量），又可以右乘（作为列向量）
+# 参考page 147/148的shape及传播图
+# batch版本的计算和单向量版本的计算在数学标识上一样，在coding里也一样
+
+class Affine:
+    
+    def __init__(self, W, b):
+        self.W = W
+        self.b = b
+        self.x = None
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        self.x = x
+        out = np.dot(x, self.W) + self.b
+
+        return out
+    
+    def backward(self, dout):
+        # 为什么输出dx：notation problem：正向传播Y=XW+B，反向传播：dY = ？dX，这里的dx就是这个意思，不要想多了
+        dx = np.dot(dout, self.W.T)
+        self.dW = np.dot(self.x.T, dout)
+        # self.db为什么要这样算（看page148图 parL/parB)
+        self.db = np.sum(dout, axis = 0)
+
+        return dx
+
+
+# softmax layer
+class SoftmaxWithLoss:
+    def __init__(self):
+        self.loss = None
+        self.y = None
+        self.t = None
+    
+    def forward(self, x, t):
+        # x input, t label
+        self.t = t
+        self.y = softmax(x)
+        self.loss = cross_entropy_error(self.y, self.t)
+    
+    def backward(self, dout = 1):
+        batch_size = self.t.shape[0]
+        dx = (self.y - self.t)/batch_size
+
+        return dx
+
+
+
+
+# %%
+# 2 layer network, a more efficient realization
+import numpy as np
+mnistPath = os.getcwd()+'\\DL-code' # pardir
+if not sum(['DL-code' in i for i in sys.path]):
+    print('curPath does not have required path, imported else where')
+    sys.path.append(mnistPath)
+from dataset.mnist import load_mnist
+
+# common.layers 里面的函数都是我们之前定义过的，跑通后测试一下之前定义的函数是否也能够跑通
+from common.layers import *
+from common.gradient import numerical_gradient
+from collections import OrderedDict
+
+# TwoLayerNet
+
+class TwoLayerNet:
+    def __init__(self, input_size, hidden_size, output_size, weight_init_std = 0.01):
+
+        #初始化权重：随机初始
+        self.params = {}
+        self.params['W1'] = weight_init_std*np.random.rand(input_size, hidden_size)
+        self.params['b1'] = np.zeros(hidden_size)
+        self.params['W2'] = weight_init_std*np.random.rand(hidden_size, output_size)
+        self.params['b2'] = np.zeros(output_size)
+
+        # define layer
+        self.layers = OrderedDict() # what is this?
+        self.layers['Affine1'] = Affine(self.params['W1'], self.params['b1'])
+        self.layers['Relu1'] = Relu()
+        self.layers['Affine2'] = Affine(self.params['W2'], self.params['b2'])
+
+        self.lastLayer = SoftmaxWithLoss()
+    
+    # 通过逐层调用self.layers(一个orderdDict对象)，逐层把输入值x往前传，直到最后一层，也即输出结果（predict）
+    def predict(self, x):
+        for layer in self.layers.values():
+            x = layer.forward(x)
+        
+        return x
+    
+    def loss(self, x, t):
+        y = self.predict(x)# 获取输出结果
+        return self.lastLayer.forward(y, t) # lastLayer即cross_ent层，这一层的forward就是在计算交叉熵损失
+    
+    def accuracy(self, x, t):
+        y = self.predict(x)
+        y = np.argmax(y, axis = 1) # 获取每一行最大值的列下标
+        # 下面这个if判断实际上可以兼容非one-hot形式的标签
+        if t.ndim != 1: t = np.argmax(t, axis = 1) #onehot里为1的idx
+        accuracy = np.sum(y == t)/float(x.shape[0])
+        return accuracy
+    
+    def numerical_gradient(self, x, t):
+        #用数值方法计算grad
+        loss_W = lambda W: self.loss(x, t)
+
+        grads = {}
+        grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
+        grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
+        grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
+        grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
+
+        return grads
+    
+    def gradient(self, x, t):
+        # 用反向传播方法计算grad
+        # 下面这个前向传播调用self.loss，不会返回任何值，作用是计算后向传播（见下面）所需要的self.LastLayer里面的值：self.loss里面会执行一次lastLayer里面的的forward
+        self.loss(x, t)
+        dout = 1
+        dout = self.lastLayer.backward(dout)
+
+        layers = list(self.layers.values())
+        # 整个网络的前向传播顺序：X->Affine1->Relu1->Affine2->softmax->分类结果
+        # 按顺序反转list，然后从后向前执行反向传播，layers就会保存每层的反向传播计算结果。
+        layers.reverse()
+        for layer in layers:
+            dout = layer.backward(dout)
+
+        grads = {}
+        grads['W1'] = self.layers['Affine1'].dW
+        grads['b1'] = self.layers['Affine1'].db
+        grads['W2'] = self.layers['Affine2'].dW
+        grads['b2'] = self.layers['Affine2'].db
+
+        return grads
+
+# gradient check:
+from dataset.mnist import load_mnist
+
+(x_train, t_train), (x_test, t_test) = load_mnist(normalize=True, one_hot_label = True)
+
+network = TwoLayerNet(input_size = 784, hidden_size = 50, output_size = 10)
+
+x_batch = x_train[:3]
+
+t_batch = t_train[:3]
+
+grad_numerical = network.numerical_gradient(x_batch, t_batch)
+grad_backprop = network.gradient(x_batch, t_batch)
+
+# 求各个权重的绝对误差的平均值（看两种计算grad的方法是否一致）
+for key in grad_numerical.keys():
+    diff = np.average(np.abs(grad_backprop[key] - grad_numerical[key]))
+
+    print(key + ':' + str(diff)) # 结果和书上不一样，因为网络权重初始化用的是随机初始化，我们并不知道书上用的随机种子是多少
+
+#%%
+# backprop in practice:
+
+network = TwoLayerNet(input_size=784, hidden_size=50, output_size = 10)
+
+iters_num = 10000 # backprop is fast, so its ok  
+train_size = x_train.shape[0]
+batch_size = 100
+learning_rate = 0.1
+train_loss_list = []
+train_acc_list = []
+test_acc_list = []
+
+iter_per_epoch = max(train_size/batch_size, 1)
+
+for i in range(iters_num):
+    batch_mask = np.random.choice(train_size, batch_size)
+    x_batch = x_train[batch_mask]
+    t_batch = t_train[batch_mask]
+
+    grad = network.gradient(x_batch, t_batch)
+
+    for key in ('W1', 'b1', 'W2', 'b2'):
+        network.params[key] -= learning_rate*grad[key]
+
+    loss = network.loss(x_batch, t_batch)
+    train_loss_list.append(loss)
+
+    if i % iter_per_epoch == 0:
+        train_acc = network.accuracy(x_train, t_train)
+        test_acc = network.accuracy(x_test, t_test)
+        train_acc_list.append(train_acc)
+        test_acc_list.append(test_acc)
+        print(f'train_acc: {train_acc:.3f}, test_acc: {test_acc:.3f}')
+

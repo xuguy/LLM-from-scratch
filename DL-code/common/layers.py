@@ -86,6 +86,7 @@ class SoftmaxWithLoss:
             dx = (self.y - self.t) / batch_size
         else:
             dx = self.y.copy()
+            # 非one-hot形式下，直接用标签值筛选对应位置的值
             dx[np.arange(batch_size), self.t] -= 1
             dx = dx / batch_size
         
