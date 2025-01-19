@@ -856,3 +856,4 @@ class AdaGrad:
             #非RMSPROP
             self.h[key] += grads[key]*grads[key]
             params[key] -= self.lr*grads[key]/(np.sqrt.h[key] + 1e-7)
+# git test
