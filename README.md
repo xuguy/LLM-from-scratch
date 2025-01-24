@@ -1,5 +1,12 @@
 # LLM from scratch notes
 
+## Pretraining
+
+- `Embedding`: The concept of converting data into a vector format is often referred to as `embedding`: 利用这种思想，我们可以把不同的数据类型（文字、视频、图片）转化为向量
+  - At its core, an embedding is a mapping from discrete objects, such as words, images, or even entire documents, to **points in a continuous vector space**—the primary purpose of embeddings is to convert nonnumeric data into a format that neural networks can process.
+- `retrieval-augmented generation`: Retrieval augmented generation combines generation (like producing text) with retrieval (like searching an external knowledge base) to pull relevant information when generating text.
+- `Word2Vec`: trained neural network architecture to generate word embeddings by predicting the context of a word given the target word or vice versa. The **main idea**
+behind `Word2Vec` is that words that appear in similar contexts tend to have similar meanings.
 ## Deep Learning related
 - thoughts, codes and notes of the book 《深度学习入门：基本框架》
 \
