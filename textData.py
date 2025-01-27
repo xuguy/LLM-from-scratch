@@ -237,7 +237,9 @@ print(embedding_layer(inputs_ids))
 vocab_size = 50257
 output_dim = 256
 # input_vecter@embedding_weight_matrix
-toekn_embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
+# torch.nn.Embedding will initialize a matrix (weights, initialized with random values) dedicated for words embedding.
+# these torch.nn.Embedding module are designed for later optimization with training.
+token_embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
 
 # load data and tokenize data
 max_length = 4
@@ -248,13 +250,15 @@ inputs, targets = next(data_iter)
 print('Token IDs:\n', inputs)
 print('\nInpyts shape:\n', inputs.shape)
 
-token_embeddings = toekn_embedding_layer(inputs)
+# 注意，token_embedding_layer输入inputs以后，inputs原来存的是ids，token_embedding_layer会先把inputs里面存的ids转换成one-hot以后再和weights matrix做矩阵运算，因此我们之前在实例化token_embedding_layer = torch.nn.Emebedding要输入vocabsize，也就是50257，这样，如果inputs里面储存的ids=52，那么他就会先被转换成一个50257维的onehot-vector（其中第52个位置为1，其他为0）后再进行矩阵运算。
+token_embeddings = token_embedding_layer(inputs)
 print(token_embeddings.shape)
 
 # create absolute position embedding
 
 context_length = max_length
 pos_embedding_layer = torch.nn.Embedding(context_length, output_dim)
+# remember that context_length = 4, 我们对每一个输入向量都做position embedding，position的长度和context_length一致
 pos_embeddings = pos_embedding_layer(torch.arange(context_length))
 print(pos_embeddings.shape)
 
