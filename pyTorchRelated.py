@@ -21,3 +21,12 @@ loss.backward()
 print(w1.grad)
 print(b.grad)
 
+input_tensor = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
+mat1 = torch.tensor([[1.0, 0.0], [0.0, 1.0]], requires_grad=True)
+mat2 = torch.tensor([[5.0, 6.0], [7.0, 8.0]], requires_grad=True)
+tmp_tensor = torch.tensor([[1.,0.],[0.,1.]])
+output = torch.addmm(input_tensor, mat1, mat2)
+output.backward(tmp_tensor)
+mat2.grad
+
+
