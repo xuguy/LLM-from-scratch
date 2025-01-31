@@ -2,8 +2,12 @@ import torch.nn.functional as F
 from torch.autograd import grad
 import torch
 
+# to test how batch data's gradients is calculated
+# the answer is to cal each then average
 y = torch.tensor([1.0])
 x1 = torch.tensor([1.1])
+# y = torch.tensor([0.0])
+# x1 = torch.tensor([2.2])
 w1 = torch.tensor([2.2], requires_grad= True)
 b = torch.tensor([0.0], requires_grad= True)
 

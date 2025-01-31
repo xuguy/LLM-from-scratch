@@ -53,4 +53,5 @@ behind `Word2Vec` is that words that appear in similar contexts tend to have sim
 ## `torch` related
 1. `requires_grad = True` check the following graph and note that one of the weight param's `requires_grad` are set to false. If we call the `grad` function, `RuntimeError` will be present: `RuntimeError`: One of the differentiated Tensors does not require grad.
 2. `grad(loss, b, retain_graph=True)`: By default, `PyTorch` destroys the computation graph after calculating the radients to free memory. However, since we will reuse this computation graph shortly, we set `retain_graph=True` so that it stays in memory.
-3. `.zero_grad()` why?： 我们一般用batch(or mini-batch) 进行梯度更新，在每一个batch内，每个batch的数据点dou都会进行一次forward+backward，也就是说，每个数据点都会进行一次完整的反向传播，而`torch`里面的`tensor`每次backward都会把梯度累加到之前的梯度上（这样有这样的好处），因此我们需要在每次forward后backward前都要把之前的梯度清空。
+3. **batch**：对batch中的每个数据分别计算gradients后取平均
+4. `.zero_grad()` why?： 我们一般用batch(or mini-batch) 进行梯度更新，在每一个batch内，每个batch的数据点dou都会进行一次forward+backward，也就是说，每个数据点都会进行一次完整的反向传播，而`torch`里面的`tensor`每次backward都会把梯度累加到之前的梯度上（这样有这样的好处），因此我们需要在每次forward后backward前都要把之前的梯度清空。
