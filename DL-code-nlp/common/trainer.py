@@ -38,7 +38,7 @@ class Trainer:
                 # 计算梯度，更新参数
                 loss = model.forward(batch_x, batch_t)
                 model.backward()
-                params, grads = remove_duplicate(model.params, model.grads)  # 将共享的权重整合为1个
+                params, grads = remove_duplicate(model.params, model.grads)  # 将共享的权重整合为1个,如果上下文包含2个词，那么就有2个重复值类，如果上下文包含2N个词，就有2N个重复类，remove以后都只保留1个
                 if max_grad is not None:
                     clip_grads(grads, max_grad)
                 optimizer.update(params, grads)
