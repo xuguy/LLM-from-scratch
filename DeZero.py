@@ -350,6 +350,8 @@ y.grad = np.array(1.0)
 y.backward()
 print(x.grad)
 
+
+# ============== almost full setup of DeZero
 # 简化backward方法：省略手动输入np.array(1.0)
 # 强制使用ndarray数据类型，避免error
 #%%
