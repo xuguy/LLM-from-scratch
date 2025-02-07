@@ -355,6 +355,7 @@ print(x.grad)
 # 简化backward方法：省略手动输入np.array(1.0)
 # 强制使用ndarray数据类型，避免error
 #%%
+import numpy as np
 class Variable:
     def __init__(self, data):
         if data is not None:
@@ -460,9 +461,195 @@ print(x.grad)
 
 # ======= finish step 09 ===========
 
+
 # ============ phase 2 =============
+#%%
+# 修改Function类以适应多个输入和输出
+
+class Function:
+    def __call__(self, *inputs):
+        # 加入星号后，所有的inputs会被打包成一个元组输入
+        xs = [x.data for x in inputs]
+        ys = self.forward(*xs)
+        # 如果ys不是元组，就把它修改为元组,因为ys有可能是单个元素
+        # 注意看新的forward方法，返回的是单个y，因此不一定是元组
+        if not isinstance(ys, tuple):
+            ys = (ys,)
+        outputs = [Variable(as_array(y)) for y in ys]
+
+        for output in outputs:
+            output.set_creator(self)
+
+        self.inputs = inputs
+        self.outputs = outputs
+        return outputs if len(outputs)>1 else outputs[0]
+    
+    def forward(self,x):
+        raise NotImplementedError('Function.forward not implemented')
+    
+    def backward(self, gy):
+        raise NotImplementedError('Function.backward not implemented')
+    
+class Add(Function):
+    def forward(self, xs):
+        x0, x1 = xs
+        y = x0 + x1
+        return (y,)
+# test: 改进（适应任意个参数）前
+# xs = [Variable(np.array(2)), Variable(np.array(3))]
+# f = Add()
+# ys = f(xs)
+# y = ys[0]
+# print(y.data)
+
+# test：改进后
+x0 = Variable(np.array(2))
+x1 = Variable(np.array(3))
+f = Add()
+y = f(x0, x1)
+print(y.data)
+
+# 改进Add的forward的方法：
+class Add(Function):
+    def forward(self, x0, x1):
+        y = x0 + x1
+        return y # 返回一个元素而不需要返回元组
+    
+    def backward(self, gy):
+        return gy, gy
+
+def add(x0, x1):
+    return Add()(x0, x1)
+
+x0 = Variable(np.array(2))
+x1 = Variable(np.array(3))
+y = add(x0, x1)
+print(y.data)
+
+class Variable:
+    def __init__(self, data):
+        if data is not None:
+            if not isinstance(data, np.ndarray):
+                raise TypeError(f'input type:{type(data)} is not supported')
+        self.data = data
+        self.grad = None
+        #在进行一次完整的正向传播后，每一个变量的creator都会被设定
+        self.creator = None
+
+    def set_creator(self, func):
+        self.creator = func
+
+    def backward(self):
+        # grad的shape与数据类型与self.data（input）相同
+        if self.grad is None:
+            self.grad = np.ones_like(self.data)
+
+        funcs = [self.creator]
+        while funcs:
+            # print(funcs) # 列表每次循环都会删掉一个Function实例，并添加一个Function实例
+            f = funcs.pop()
+            #gys是后一个变量的grad
+            gys = [output.grad for output in f.outputs]
+            # gxs是前一个变量的grad
+            gxs = f.backward(*gys)
+            if not isinstance(gxs, tuple):
+                gxs = (gxs,)
+            # f.inputs是Variable，x.grad是数值
+            for x, gx in zip(f.inputs, gxs):
+                if x.grad is None:
+                    x.grad = gx
+                else:
+                    x.grad = x.grad + gx
+
+                if x.creator is not None:
+                    funcs.append(x.creator)
 
 
 
+class Square(Function):
+    def forward(self, x):
+        y = x**2
+        return y
+    
+    def backward(self, gy):
+        x = self.inputs[0].data
+        gx = 2*x*gy
+        return gx
 
+def square(x):
+    f = Square()
+    return f(x)
+
+x = Variable(np.array(2.0))
+y = Variable(np.array(3.0))
+
+z = add(square(x), square(y))
+z.backward()
+print(z.data)
+print(x.grad)
+print(y.grad)
+
+# test add 2 same number
+x = Variable(np.array(3.0))
+y = add(add(x, x),x)
+y.backward()
+print(f'y:{y.data}, x.grad: {x.grad}')
+'''
+上面这种计算grad的方式虽然可以避免无法正确计算使用同一个Variable作为参数的函数的grad的问题，但也会有新的问题：一旦我们需要重复使用同一个实例（为了节省内存，重复使用x=Variable()），之前计算的倒数会被加在新的导数上，而我们既然重复使用同一个实例那就必然希望该实例是全新的未使用过的状态，因此需要“重置导数”
+'''
+class Variable:
+    def __init__(self, data):
+        if data is not None:
+            if not isinstance(data, np.ndarray):
+                raise TypeError(f'input type:{type(data)} is not supported')
+        self.data = data
+        self.grad = None
+        #在进行一次完整的正向传播后，每一个变量的creator都会被设定
+        self.creator = None
+
+    def set_creator(self, func):
+        self.creator = func
+
+    def backward(self):
+        # grad的shape与数据类型与self.data（input）相同
+        if self.grad is None:
+            self.grad = np.ones_like(self.data)
+
+        funcs = [self.creator]
+        while funcs:
+            # print(funcs) # 列表每次循环都会删掉一个Function实例，并添加一个Function实例
+            f = funcs.pop()
+            #gys是后一个变量的grad
+            gys = [output.grad for output in f.outputs]
+            # gxs是前一个变量的grad
+            gxs = f.backward(*gys)
+            if not isinstance(gxs, tuple):
+                gxs = (gxs,)
+            # f.inputs是Variable，x.grad是数值
+            for x, gx in zip(f.inputs, gxs):
+                if x.grad is None:
+                    x.grad = gx
+                else:
+                    x.grad = x.grad + gx
+
+                if x.creator is not None:
+                    funcs.append(x.creator)
+    # 把self.grad设定为None就行
+    def cleargrad(self):
+        self.grad = None
+
+x = Variable(np.array(3.0))
+y = add(x,x)
+y.backward()
+print(x.grad) # 2.0
+
+x.cleargrad()
+y = add(add(x,x),x)
+y.backward()
+print(x.grad) # 3.0
+'''
+因此，在调用第二个计算的y.backward之前调用x.cleargrad()，就可以充值变量中保存的导数，这样就可以使用同一个变量实例来执行其他操作计算，从而达到节省内存的目的
+'''
+# %%
+# step 15:复杂计算题的实现
 
