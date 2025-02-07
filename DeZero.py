@@ -651,5 +651,166 @@ print(x.grad) # 3.0
 因此，在调用第二个计算的y.backward之前调用x.cleargrad()，就可以充值变量中保存的导数，这样就可以使用同一个变量实例来执行其他操作计算，从而达到节省内存的目的
 '''
 # %%
-# step 15:复杂计算题的实现
+# step 15/16:复杂计算图的实现
+# 增加“辈分”变量
+class Variable:
+    def __init__(self, data):
+        if data is not None:
+            if not isinstance(data, np.ndarray):
+                raise TypeError('{} is not supported'.format(type(data)))
+        self.data = data
+        self.grad = None
+        self.creator = None
+        self.generation = 0
+    
+    def set_creator(self, func):
+        self.creator = func
+        self.generation = func.generation + 1
+    def backward(self):
+        # grad的shape与数据类型与self.data（input）相同
+        if self.grad is None:
+            self.grad = np.ones_like(self.data)
+
+        funcs = [self.creator]
+        while funcs:
+            # print(funcs) # 列表每次循环都会删掉一个Function实例，并添加一个Function实例
+            f = funcs.pop()
+            #gys是后一个变量的grad
+            gys = [output.grad for output in f.outputs]
+            # gxs是前一个变量的grad
+            gxs = f.backward(*gys)
+            if not isinstance(gxs, tuple):
+                gxs = (gxs,)
+            # f.inputs是Variable，x.grad是数值
+            for x, gx in zip(f.inputs, gxs):
+                if x.grad is None:
+                    x.grad = gx
+                else:
+                    x.grad = x.grad + gx
+
+                if x.creator is not None:
+                    funcs.append(x.creator)
+    # 把self.grad设定为None就行
+    def cleargrad(self):
+        self.grad = None
+
+class Function(object):
+    def __call__(self, *inputs):
+        xs = [x.data for x in inputs]
+        ys = self.forward(*xs)
+        if not isinstance(ys, tuple):
+            ys = (ys,)
+        outputs = [Variable(as_array(y)) for y in ys]
+        # func的generation就是inputs的gen中最大的那个
+        self.generation = max([x.generation for x in inputs])
+        for output in outputs:
+            output.set_creator(self)
+        self.inputs = inputs 
+        self.outputs = outputs
+        return outputs if len(outputs) > 1 else outputs[0]
+
+    def forward(self,x):
+        raise NotImplementedError('Function.forward not implemented')
+    
+    def backward(self, gy):
+        raise NotImplementedError('Function.backward not implemented')
+
+# # test
+# generations = [2, 0, 1, 4, 2]
+# funcs = []
+# for g in generations:
+#     f = Function()
+#     f.generation = g
+#     funcs.append(f)
+# [f.generation for f in funcs]
+
+# funcs.sort(key=lambda x: x.generation)
+# [f.generation for f in funcs]
+# f = funcs.pop()
+# f.generation # should be 4
+class Variable:
+    def __init__(self, data):
+        if data is not None:
+            if not isinstance(data, np.ndarray):
+                raise TypeError('{} is not supported'.format(type(data)))
+        self.data = data
+        self.grad = None
+        self.creator = None
+        self.generation = 0
+    
+    def set_creator(self, func):
+        self.creator = func
+        # 在正向传播(__call__)的过程中对变量对output设定generation，为什么只对output？：因为只有output会被调用set_creator
+        self.generation = func.generation + 1
+
+
+    def backward(self):
+        if self.grad is None:
+            self.grad = np.ones_like(self.data)
+        funcs = []
+        # 用于防止同一个函数被多次添加到funcs中，从而防止一个函数的backward方法被错误地多次调用: 图论有关的算法常用技巧，用来防止cycle
+        seen_set = set()
+
+        def add_func(f):
+            if f not in seen_set:
+                funcs.append(f)
+                seen_set.add(f)
+                funcs.sort(key=lambda x: x.generation)
+        
+        add_func(self.creator)
+
+        while funcs:
+            f = funcs.pop()
+            gys = [output.grad for output in f.outputs]
+            gxs = f.backward(*gys)
+            if not isinstance(gxs, tuple):
+                gxs = (gxs,)
+            for x, gx in zip(f.inputs, gxs):
+                if x.grad is None:
+                    x.grad = gx
+                else:
+                    x.grad = x.grad + gx
+                if x.creator is not None:
+                    add_func(x.creator)
+    def cleargrad(self):
+        self.grad = None
+
+class Add(Function):
+    def forward(self, x0, x1):
+        y = x0 + x1
+        return y # 返回一个元素而不需要返回元组
+    
+    def backward(self, gy):
+        return gy, gy
+
+
+class Square(Function):
+    def forward(self, x):
+        y = x**2
+        return y
+    
+    def backward(self, gy):
+        x = self.inputs[0].data
+        gx = 2*x*gy
+        return gx
+    
+def add(x0, x1):
+    return Add()(x0, x1)
+
+def square(x):
+    f = Square()
+    return f(x)
+
+x = Variable(np.array(2.0))
+a = square(x)
+y = add(square(a), square(a))
+y.backward()
+print(y.data)
+print(x.grad)
+
+        
+
+            
+
+
 
