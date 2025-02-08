@@ -875,7 +875,7 @@ class Variable(object):
         # 在正向传播(__call__)的过程中对变量对output设定generation，为什么只对output？：因为只有output会被调用set_creator
         self.generation = func.generation + 1
 
-    def backward(self):
+    def backward(self, retain_grad = False):
         if self.grad is None:
             self.grad = np.ones_like(self.data)
         funcs = []
@@ -904,6 +904,12 @@ class Variable(object):
                     x.grad = x.grad + gx
                 if x.creator is not None:
                     add_func(x.creator)
+            # retain grad adaptation：在backwards计算完grad以后，删除输出的grad（y.grad）,保留x.grad继续反向传播
+            if not retain_grad:
+                for y in f.outputs:
+                    # 注意，outputs是weakref
+                    y().grad = None
+
     def cleargrad(self):
         self.grad = None
 
@@ -933,12 +939,122 @@ def square(x):
     f = Square()
     return f(x)
 
-# test
+# test#1
 for i in range(10):
     x = Variable(np.random.rand(10000))
     y = square(square(square(x)))
 
+# test#2: retain_grad adaptation test
+x0 = Variable(np.array(1.0))
+x1 = Variable(np.array(1.0))
+t = add(x0, x1)
+y = add(x0, t)
+y.backward()
 
+print(f'y.grad: {y.grad}\nt.grad: {t.grad}\nx0.grad: {x0.grad}\nx1.grad: {x1.grad}')
+
+'''
+正反向传播的变量之间的联系是如何建立的呢？换句话说，前一个变量的outputs是如何与下一个变量的inputs建立联系的呢？
+注意观察Variable里面的backward方法里面的这一小段：
+while funcs:
+f = funcs.pop()
+# gys = [output.grad for output in f.outputs]
+gys = [output().grad for output in f.outputs]
+gxs = f.backward(*gys)
+if not isinstance(gxs, tuple):
+gxs = (gxs,)
+for x, gx in zip(f.inputs, gxs):
+if x.grad is None:
+    x.grad = gx
+else:
+    x.grad = x.grad + gx
+if x.creator is not None:
+    add_func(x.creator)
+#========== code end =============
+# keypoint：
+f.outputs->gys->gxs; for x, gx in zip(f.inputs, gxs)
+'''
+
+# 用Config类切换正向传播模式/反向传播模式：省去不必要的计算
+import numpy as np
+import weakref
+
+def as_array(x):
+    if np.isscalar(x):
+        return np.array(x)
+    return x
+
+
+class Config:
+    enable_backprop = True
+
+class Function:
+    def __call__(self, *inputs):
+        xs = [x.data for x in inputs]
+        ys = self.forward(*xs)
+        if not isinstance(ys, tuple):
+            ys = (ys,)
+        outputs = [Variable(as_array(y)) for y in ys]
+        if Config.enable_backprop:
+        # ======== BP code ==========
+            # func的generation就是inputs的gen中最大的那个
+            self.generation = max([x.generation for x in inputs])
+            for output in outputs:
+                output.set_creator(self) # 设置前后连接
+            self.inputs = inputs 
+            # 注意观察上面的outputs是如何生成的，就可以理解下面这里的列表推导式
+            # 函数输出变量这一环节使用弱引用，打破循环应用
+            self.outputs = [weakref.ref(output) for output in outputs]# original: self.outputs = outputs
+        # ========= BP code end ==========
+        return outputs if len(outputs) > 1 else outputs[0]
+
+    def forward(self,x):
+        raise NotImplementedError('Function.forward not implemented')
+    
+    def backward(self, gy):
+        raise NotImplementedError('Function.backward not implemented')
+
+# 重新运行子类定义，确定父类的修改被应用
+class Add(Function):
+    def forward(self, x0, x1):
+        y = x0 + x1
+        return y # 返回一个元素而不需要返回元组
+    
+    def backward(self, gy):
+        return gy, gy
+
+
+class Square(Function):
+    def forward(self, x):
+        y = x**2
+        return y
+    
+    def backward(self, gy):
+        x = self.inputs[0].data
+        gx = 2*x*gy
+        return gx
+    
+def add(x0, x1):
+    return Add()(x0, x1)
+
+def square(x):
+    f = Square()
+    return f(x)
+
+# test
+Config.enable_backprop = True
+x = Variable(np.ones((100,100,100)))
+y = square(square(square(x)))
+y.backward()
+print(x.grad)
+
+Config.enable_backprop = False
+x = Variable(np.ones((100, 100, 100)))
+y = square(square(square(x)))
+y.backward() # error
+print(x.grad) # still None
+
+# 使用with语句处理需要临时修改config的情况
 
 
 
