@@ -1,3 +1,9 @@
+'''
+import sys
+sys.path.append('DL-code-nlp')
+from common.util import preprocess
+'''
+
 text = 'You say goodbye and I say hello.'
 text = text.lower()
 text = text.replace('.',' .')
@@ -45,11 +51,18 @@ text = 'Your say goodbye and I say hello.'
 corpus, word_to_id, id_to_word = preprocess(text)    
 
 # distributed hypothesis
-import sys
 import numpy as np
-
+import sys
 sys.path.append('DL-code-nlp')
 from common.util import preprocess
+
+'''
+“上下文” def:
+这里，我们将左右两边相同数量的单词作为上下文。但是，根据
+具体情况，也可以仅将左边的单词或者右边的单词作为上下文。
+此外，也可以使用考虑了句子分隔符的上下文。简单起见，本书
+仅处理不考虑句子分隔符、左右单词数量相同的上下文。
+'''
 
 text = 'You say goodbye and I say hello.'
 corpus, word_to_id, id_to_word = preprocess(text)
@@ -94,6 +107,10 @@ print(cos_similarity(c0, c1))
 
 # 相似度排序
 def most_similar(query, word_to_id, id_to_word, word_matrix, top=5):
+
+    '''
+    word_matrix: 每一行保存了单词向量，co-occurance mat可以作为一种word_matrix
+    '''
     if query not in word_to_id:
         print(f'{query} is no found')
         return
@@ -131,11 +148,48 @@ most_similar('you', word_to_id, id_to_word, C, top=5)
 
 import numpy as np
 import sys
-sys.path.append('DL-code-nlp')
-# MatMul is a layer, which include forward and backward method
-from common.layers import MatMul
+# sys.path.append('DL-code-nlp')
+# # MatMul is a layer, which include forward and backward method
+# from common.layers import MatMul
+
+# define MatMul, a computing layer
+class MatMul:
+    def __init__(self, W):
+        self.params = [W]
+        self.grads = [np.zeros_like(W)]
+        self.x = None
+        '''
+        这里用到了一个小技巧： self.params is expected to be an iterable (like a list or tuple) containing exactly one element. The comma (W,) on the left side ensures that the single value inside self.params is extracted and assigned to W.
+        - When writing W, = self.params, it unpacks the first (and only) element from the list into W.
+
+        - If self.params had more than one element, W, = self.params would raise an error:
+
+        - This syntax is useful when you want to enforce that an iterable contains exactly one element and avoid accidental mistakes of using an incorrect structure.
+        '''
+
+    def forward(self, x):
+        W, = self.params
+        out = np.dot(x, W)
+        self.x = x
+        return out
+
+    def backward(self, dout):
+        W, = self.params
+        dx = np.dot(dout, W.T)
+        dW = np.dot(self.x.T, dout)
+        self.grads[0][...] = dW # 见下方注释
+        return dx
+'''
+上面这里出现了新的语法：self.grads[0][...] = dW
+在__init__中我们知道，self.grad里面同样含且只含一个元素，这个元素正是self.grad[0]，而[...]等效于 [:], 表示means "assign to all elements" within the array，即一次性把这个矩阵里的元素全部改成和dW一样，这样做的好处是preserving any references to it,ensures efficient memory management and avoids creating unnecessary new arrays.
+
+如果写成 self.grads[0] = dW 那么 self.grads[0] 的引用会被 dW 覆盖，self.grads[0] 现在指向 dW 的新对象，而不是继续引用原来的数组。但 self.grads[0][...] = dW 不会改变 self.grads[0] 的引用，而是直接修改数组内部的数值, 保持与原始 self.grads[0] 的内存地址一致,这在某些优化算法（如梯度下降）中很重要，避免了不必要的内存分配，提高了效率。
+'''
+
+
 c = np.array([[1,9,9,9,9,9,9]])
 W = np.random.rand(7, 3)
+
 layer = MatMul(W)
 h = layer.forward(c)
 
@@ -143,21 +197,21 @@ print(h)
 
 # cbow
 # forward
-c0 = np.array([[1,0,0,0,0,0,0]])
+c0 = np.array([[1,0,0,0,0,0,0]]) # 考虑了mini-batch的处理，所以用2维矩阵储存数据  
 c1 = np.array([[0,0,1,0,0,0,0]])
 
 W_in = np.random.rand(7,3)
 W_out = np.random.rand(3, 7)
 
-in_layer0 = MatMul(W_in)
+in_layer0 = MatMul(W_in) #给各层赋予权重
 in_layer1 = MatMul(W_in)
 out_layer = MatMul(W_out)
 
-h0 = in_layer0.forward(c0)
+h0 = in_layer0.forward(c0) #计算前向传播
 h1 = in_layer1.forward(c1)
 
-h = 0.5*(h0+h1)
-s = out_layer.forward(h)
+h = 0.5*(h0+h1) # 2个语料的前向传播取平均
+s = out_layer.forward(h) # 输出层
 
 print(s)
 
