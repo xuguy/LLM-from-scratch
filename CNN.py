@@ -29,6 +29,7 @@ def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
 
     # np.pad : [(0,0), (0,0), (pad,pad), (pad,pad)]-> [dim0, dim1, dim2, dim3]; (pad_before_0st_elem, pad_after_last_elem), elem refer to the elements of the dimension, remember that each dimension is a vector, so it has first and last element.
     img = np.pad(input_data, [(0,0), (0,0), (pad, pad), (pad, pad)], 'constant')
+
     # 用来保存展开后的输入数据，方便进行卷积运算
     # N = batch_size, C = channel num，(filter_h, filter_w)储存单个滤波作用域的数据，看作一个整体，那么有多少个这样的作用域呢？答案和最终输出的矩阵的元素个数一样，最终我们会输出一个(out_h, out_w)的矩阵（滤波器作用的结果），而每个滤波器作用域会产生1个元素，这就是最后两个维度的来源。
     col = np.zeros((N, C, filter_h, filter_w, out_h, out_w))
@@ -38,7 +39,7 @@ def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
         for x in range(filter_w):
             x_max = x + stride*out_w
             col[:, :, y, x, :, :] = img[:, :, y:y_max:stride, x:x_max:stride]
-
+    print(col.shape)
     col = col.transpose(0, 4, 5, 1, 2, 3).reshape(N*out_h*out_w, -1)
     return col
 
@@ -64,4 +65,9 @@ x[0].shape
 
 x1 = np.random.rand(1,3,7,7)
 col1 = im2col(x1, 5, 5, stride = 1, pad = 0)
-col1.shape
+col1.shape # (9, 75)
+'''
+如何理解输出的shape：
+- 先来看输入的shape：(1,3,7,7), N=1, C=3, H=W=7
+- 再看指定的filter shape：3x5x5，stride=1，那么这个filter作用在输入数据上会产生一个(N, H, W) = (3,5,5)的方块，把一个这样的方块横向展开后，会得到3x5x5=75个元素（横向），这样的方块一共会有3x3=9个（边长为5的filter在7x7的square上以stride=1只能在横纵坐标上移动3格），而我们需要把9个这样的方块展开成的行排成一列（“横向展开为1列”），因此一共有9行，这就是（9，75）的由来。
+'''
