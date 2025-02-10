@@ -9,7 +9,7 @@ import numpy as np
 
 def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
     """
-
+    把输入数据展开以适合滤波器，因此需要输入滤波器的形状filter_h, filter_w；而滤波器的通道数必然和输入数据一样，因此不需要输入
     Parameters
     ----------
     input_data : 由(数据量, 通道, 高, 长)的4维数组构成的输入数据
@@ -23,11 +23,14 @@ def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
     col : 2维数组
     """
     N, C, H, W = input_data.shape
+    # 计算经过卷积运算后输出值的形状
     out_h = (H + 2*pad - filter_h)//stride + 1
     out_w = (W + 2*pad - filter_w)//stride + 1
 
     # np.pad : [(0,0), (0,0), (pad,pad), (pad,pad)]-> [dim0, dim1, dim2, dim3]; (pad_before_0st_elem, pad_after_last_elem), elem refer to the elements of the dimension, remember that each dimension is a vector, so it has first and last element.
     img = np.pad(input_data, [(0,0), (0,0), (pad, pad), (pad, pad)], 'constant')
+    # 用来保存展开后的输入数据，方便进行卷积运算
+    # N = batch_size, C = channel num，(filter_h, filter_w)储存单个滤波作用域的数据，看作一个整体，那么有多少个这样的作用域呢？答案和最终输出的矩阵的元素个数一样，最终我们会输出一个(out_h, out_w)的矩阵（滤波器作用的结果），而每个滤波器作用域会产生1个元素，这就是最后两个维度的来源。
     col = np.zeros((N, C, filter_h, filter_w, out_h, out_w))
 
     for y in range(filter_h):
@@ -58,3 +61,7 @@ page 218
 x = np.random.rand(10, 1, 28, 28)
 x.shape
 x[0].shape
+
+x1 = np.random.rand(1,3,7,7)
+col1 = im2col(x1, 5, 5, stride = 1, pad = 0)
+col1.shape

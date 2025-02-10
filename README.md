@@ -55,3 +55,13 @@ behind `Word2Vec` is that words that appear in similar contexts tend to have sim
 2. `grad(loss, b, retain_graph=True)`: By default, `PyTorch` destroys the computation graph after calculating the radients to free memory. However, since we will reuse this computation graph shortly, we set `retain_graph=True` so that it stays in memory.
 3. **batch**：对batch中的每个数据分别计算gradients后取平均
 4. `.zero_grad()` why?： 我们一般用batch(or mini-batch) 进行梯度更新，在每一个batch内，每个batch的数据点dou都会进行一次forward+backward，也就是说，每个数据点都会进行一次完整的反向传播，而`torch`里面的`tensor`每次backward都会把梯度累加到之前的梯度上（这样有这样的好处），因此我们需要在每次forward后backward前都要把之前的梯度清空。
+
+## CNN
+
+### `im2col`的计算方式示意图
+**(正好和本书的展开方向相反)示意图是把输入数据中滤波器的作用区域从头开始依次纵向展开为1列（前面的通道在上面，后面的通道依次往下排），然后再拼成一行，按照书上的描述，应该是“依次纵向展开为1行”**
+二者的原理一样：指定展开方向，一个通道展开完毕后下一个通道紧随其后
+![](mdfig\2025-02-10-17-56-48.png)
+
+### 包含bias的计算方法示意图 (batchsize = 1)
+![](mdfig\2025-02-10-17-34-45.png)
