@@ -65,3 +65,14 @@ behind `Word2Vec` is that words that appear in similar contexts tend to have sim
 
 ### 包含bias的计算方法示意图 (batchsize = 1)
 ![](mdfig\2025-02-10-17-34-45.png)
+
+### 前向传播shape变换：
+[参考url](https://blog.csdn.net/m0_60461719/article/details/133951221)
+![](mdfig\2025-02-11-18-34-19.png)
+
+### 反向传播：
+
+- **affine 层的反向传播**
+$$\frac{\partial L}{\partial x} = \frac{\partial L}{\partial Y} (dout)\cdot W^T$$
+
+$$\frac{\partial L}{\partial W} = X^T \cdot \frac{\partial L}{\partial Y} (dout)$$

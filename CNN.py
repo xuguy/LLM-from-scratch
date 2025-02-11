@@ -83,10 +83,11 @@ col1.shape # (9, 75)
 # 我们将要对im2col进行逆运算：
 def col2im(col, input_shape, filter_h, filter_w, stride=1, pad=0):
     """
+    整个过程都是im2col的逆序，先把col从二维变回六维，然后再转置变回最初形状为N, C, FH, FW, OH, OW。现在img形状是N, C, H, W，但是内容都为0，需要把col的内容填回去。
 
     Parameters
     ----------
-    col :
+    col : im2col的输出值
     input_shape : 输入数据的形状（例：(10, 1, 28, 28)）
     filter_h :
     filter_w
@@ -187,6 +188,7 @@ class Convolution:
         self.dW = np.dot(self.col.T, dout)
         self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
 
+        #dcol就是二维形式的dx，后面把dcol变回4维
         dcol = np.dot(dout, self.col_W.T)
         # must define col2im function
         dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
