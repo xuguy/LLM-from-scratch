@@ -193,3 +193,128 @@ for epoch in range(100):
 # print result
 for name, param in model.named_parameters():
     print(f'Parameter {name}: {param.data}')
+
+# now proceed to a more sophistcated one:
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import pandas as pd
+
+dataset = pd.read_csv('dl-dataset/DL-tutor1-diabetes.csv') #https://github.com/plotly/datasets/blob/master/diabetes.csv
+
+#取出前8个features（该数据集一共就只有8个features）
+X = dataset.iloc[:, :8]
+#取出标签,0/1
+y = dataset.iloc[:, -1]
+
+# 数据转换为tensor
+X = torch.tensor(X.to_numpy(), dtype=torch.float32)
+y = torch.tensor(y.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+
+# define model: a fully connected feedforward nn
+'''
+1. The model expects rows of data with 8 variables （数据集有8个features） (the first argument at the first layer set to 8)
+2. The first hidden layer has 12 neurons, followed by a ReLU activation function
+3. The second hidden layer has 8 neurons, followed by another ReLU activation function
+4. The output layer has one neuron, followed by a sigmoid activation function
+
+'''
+class PimaClassifier(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.hidden1 = nn.Linear(8, 12)
+        self.act1 = nn.ReLU()
+        self.hidden2 = nn.Linear(12, 8)
+        self.act2 = nn.ReLU()
+        self.output = nn.Linear(8, 1)
+        self.act_output = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.act1(self.hidden1(x))
+        x = self.act2(self.hidden2(x))
+        x = self.act_output(self.output(x))
+        return x
+
+model = PimaClassifier()
+print(model)
+
+'''
+PimaClassifier(
+  (hidden1): Linear(in_features=8, out_features=12, bias=True)
+  (act1): ReLU()
+  (hidden2): Linear(in_features=12, out_features=8, bias=True)
+  (act2): ReLU()
+  (output): Linear(in_features=8, out_features=1, bias=True)
+  (act_output): Sigmoid()
+)
+'''
+
+#%%
+
+# a less-verbose way:
+model = nn.Sequential(
+    nn.Linear(8, 12),
+    nn.ReLU(),
+    nn.Linear(12, 8),
+    nn.ReLU(),
+    nn.Linear(8, 1),
+    nn.Sigmoid())
+
+
+print(model)
+'''
+Sequential(
+  (0): Linear(in_features=8, out_features=12, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=12, out_features=8, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=8, out_features=1, bias=True)
+  (5): Sigmoid()
+)
+'''
+# prepare for training
+loss_fn = nn.BCELoss()  # binary cross entropy loss
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+n_epochs = 100
+batch_size = 10
+
+# training loop
+for epoch in range(n_epochs):
+    for i in range(0, len(X), batch_size):
+        Xbatch = X[i:i+batch_size]
+        y_pred = model(Xbatch)
+        ybatch = y[i:i+batch_size]
+        
+        # 注意这列的loss_fn之前定义过
+        loss = loss_fn(y_pred, ybatch)
+        optimizer.zero_grad()#Before performing backpropagation, the gradients need to be cleared. If you don't clear the gradients using,
+        #they will keep accumulating, which can lead to incorrect gradient updates and ultimately incorrect model training.
+        loss.backward() #The gradient of the model parameters with respect to the loss is automatically calculated.
+        optimizer.step() #update the weights of the model based on the calculated gradient to reduce the loss.
+    print(f'Finished epoch {epoch}, latest loss {loss}')
+
+'''
+经过多次实验我们发现，最后loss在loop = 100， lr=0.001的情况下会稳定到0.3左右
+'''
+
+# %%
+
+# 用training set评估模型
+# with语句切换eval模式
+with torch.no_grad():
+    y_pred = model(X) # model(X): forward并输出预测结果(sigmoid)
+
+'''
+# y_pred.round(): 超过0.5的1，小于等于0.5的0
+tmp = torch.tensor(0.5, dtype=torch.float32)
+tmp.round() # 0
+tmp = torch.tensor(0.501, dtype=torch.float32)
+tmp.round() # 1
+'''
+accuracy = (y_pred.round() == y).float().mean()
+print(f"Accuracy {accuracy}")# loss~0.376, Accuracy 0.76953125
+
+
+# %%
