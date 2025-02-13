@@ -222,6 +222,8 @@ print(s)
 check:
 https://www.parasdahal.com/softmax-crossentropy
 '''
+
+import numpy as np
 def stable_softmax(X):
     exps = np.exp(X - np.max(X))
     return exps / np.sum(exps)
@@ -253,6 +255,32 @@ print(f'contexts: \n{contexts}\ntarget: \n{target}')
 from common.util import convert_one_hot
 from common.layers import MatMul, SoftmaxWithLoss
 
+def convert_one_hot(corpus, vocab_size):
+    '''转换为one-hot表示
+
+    :param corpus: 单词ID列表（一维或二维的NumPy数组）page111 图3-17
+    :param vocab_size: 词汇个数,注意，corpus里面的单个数组不一定包含所有词汇，单个数组的长度也不代表词汇个数，因此需要另外单独指定词汇个数。
+    :return: one-hot表示（二维或三维的NumPy数组）
+    '''
+    N = corpus.shape[0] # 单个语料的长度
+
+    # contexts 也可以是corpus
+    # 如果corpus里只包含一个向量，那么一个2维矩阵就可以保存所有单词的one-hot表示，如果corpus里面包含超过1个向量，那么就需要一个3维矩阵，这个三维矩阵的第0维就是batchsize
+    if corpus.ndim == 1:
+        one_hot = np.zeros((N, vocab_size), dtype=np.int32)
+        for idx, word_id in enumerate(corpus):
+            one_hot[idx, word_id] = 1
+
+    elif corpus.ndim == 2:
+        C = corpus.shape[1]
+        one_hot = np.zeros((N, C, vocab_size), dtype=np.int32)
+        for idx_0, word_ids in enumerate(corpus):
+            for idx_1, word_id in enumerate(word_ids):
+                one_hot[idx_0, idx_1, word_id] = 1
+
+    return one_hot
+
+
 text = 'You say goodbye and I say hello.'
 corpus, word_to_id, id_to_word = preprocess(text)
 
@@ -275,10 +303,12 @@ class SimpleCBOW: # contexts size = 1
         self.in_layer1 = MatMul(W_in)
         self.out_layer = MatMul(W_out)
         self.loss_layer = SoftmaxWithLoss()
+
         # 序列化layers，让输入数据按顺序通过各层
+        # 将所有的权重和梯度整理到列表中
         layers = [self.in_layer0, self.in_layer1, self.out_layer]
 
-        #保存计算的权重（参数）和梯度
+        #保存各层计算的权重（参数）和梯度，这个网络最终需要的就是这些权重
         self.params, self.grads = [], []
 
         for layer in layers:
@@ -325,6 +355,31 @@ word_vecs = model.word_vecs
 for word_id, word in id_to_word.items():
     print(word, word_vecs[word_id])
 
+# test 
+import numpy as np
+class Affine:
+    def __init__(self, W, b):
+        self.params = [W, b]
+
+    def forward(self, x):
+        W, b = self.params
+        out = np.dot(x, W) + b
+        return out
+    
+W1 = np.random.randn(3,2)
+b1 = np.random.randn(2)
+x = np.random.randn(3)
+out1 = np.dot(x, W1) + b1
+tmp1 = Affine(W1,b1)
+tmp2 = Affine(W1,b1)
+tmp1.forward(x)
+tmp2.params[0] = tmp2.params[0]+1
+tmp2.params[0]
+tmp1.params[0]
+W1
+'''
+上面这段测试说明，实例化以后的Affine里面的参数不会影响传入的原参数W1 b1，各个实例内的参数时独立运行、独立更新的。
+'''
 # accelerated word2vec below===========================
 
 
