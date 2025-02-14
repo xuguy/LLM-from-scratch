@@ -318,3 +318,133 @@ print(f"Accuracy {accuracy}")# loss~0.376, Accuracy 0.76953125
 
 
 # %%
+
+# about tensor
+tmp = [1,2,3,4,5,5]
+t = torch.tensor(tmp)
+t.dtype # torch.int64
+
+# add dimension or unsqueeze
+tmp = torch.tensor([[1,2,3],[4,5,6]]) # shape (2,3)
+tmp[None].shape # shape (1,2,3)
+tmp.unsqueeze(dim = 0).shape # shape (1,2,3), equivalent to [None] with param dim = 0
+
+# lets pretend we have an image of 5x5
+img_t = torch.randn(3,5,5) # channels, rows, columns
+weights = torch.tensor([0.2126, 0.7152, 0.0722]) # to cal brightness, weights of R,G,B
+batch_t = torch.randn(2,3,5,5) # batch, channels, rows, columns
+
+im_gray_naive = img_t.mean(dim=-3)
+batch_gray_naive = batch_t.mean(dim=-3)
+im_gray_naive.shape, batch_gray_naive.shape
+
+unsqueezed_weights = weights.unsqueeze(dim=-1).unsqueeze_(dim=-1) #shape: (3,1,1), the last .unsqueeze_ with underscore is equivalent to .unsqueeze() without one
+img_weights = (img_t*unsqueezed_weights)
+batch_weights = (batch_t*unsqueezed_weights)
+img_gray_weighted = img_weights.sum(dim=-3) # the -3 dim: channel
+batch_gray_weighted = batch_weights.sum(dim = -3)
+batch_weights.shape, batch_t.shape, unsqueezed_weights.shape
+
+# add name to dimension:
+weights_named = torch.tensor([0.2126, 0.7152, 0.0722], names = ['channels'])
+weights_named # tensor([0.2126, 0.7152, 0.0722], names=('channels',))
+
+# add names to tensor dim where already have names
+img_named = img_t.refine_names(... , 'channels', 'rows', 'columns')
+batch_named = batch_t.refine_names(... , 'channels', 'rows', 'columns')
+
+# out: img named torch.Size([3, 5, 5]) ('channels', 'rows', 'columns')
+print('img named', img_named.shape, img_named.names)
+print('batch named', batch_named.shape, batch_named.names)
+
+# align dim with names:
+# weights 只有一个dim，name是channels，而img_named有3个dim，name分别是'channels' 'rows' 'columns'
+weights_aligned = weights_named.align_as(img_named)
+# align_as 把broadcast需要的步骤：unsqueeze自动化了
+weights_aligned.shape, weights_aligned.names
+# out: (torch.Size([3, 1, 1]), ('channels', 'rows', 'columns'))
+
+gray_named = (img_named*weights_aligned).sum(dim = 'channels')
+gray_named.shape, gray_named.names
+# out: (torch.Size([5, 5]), ('rows', 'columns'))
+
+# drop names to go back to operation of unnamed dim:
+gray_plain = gray_named.rename(None)
+gray_plain.shape, gray_plain.names
+# out: (torch.Size([5, 5]), (None, None))
+
+# tensor vs storage:
+points = torch.tensor([[4.0, 1.0], [5.0, 3.0], [2.0, 1.0]])
+points.storage()
+# change the storage will change the tensor
+
+# IN-PLACE operation:
+a = torch.ones(3,2)
+a.zero_()
+a # become zero with operation trailing underscore
+
+# offset, stride, size
+points = torch.tensor([[4.0, 1.0], [5.0, 3.0], [2.0, 1.0]])
+second_point = points[1] # [5.0, 3.0]
+second_point.storage_offset() # out: 2
+second_point.size() # out: torch.Size([2])
+second_point.shape # same as above
+'''
+accessing an element i, j in a 2D tensor =
+storage_offset + stride[0] * i + stride[1] * j 
+'''
+
+points.stride() #(2, 1)
+second_point.stride() # (1,): 第二个点是一个1维向量，因此只有一个维度而不是2两，他的下一个点的stride距离第一个点为
+second_point.storage_offset() # still be 2, 因为subvector和原vector具有相同的storage
+# 因此，改变subvector，会直接改变原vector，最好不要这样做
+# 我们应该用.clone() 取修改subvector，避免对原vector产生变化
+
+second_point = points[1].clone()
+second_point.storage_offset() # become 0: new storage
+
+# transposing without copying
+points = torch.tensor([[4.0, 1.0], [5.0, 3.0], [2.0, 1.0]])
+points
+
+points_t = points.t()
+points_t
+points.storage().data_ptr() == points_t.storage().data_ptr()
+
+#  the storage holds the elements in the tensor sequentially row by row
+points.stride() # (2, 1)
+points_t.stride() # (1, 2)
+
+# transposing multi dim
+some_t = torch.ones(3,4,5)
+transpose_t = some_t.transpose(0, 2) # transpose dim 0 and 2
+some_t.shape # torch.Size([3, 4, 5])
+transpose_t.shape # torch.Size([5, 4, 3])
+
+some_t.stride() # (20, 5, 1)
+transpose_t.stride() # (1, 5, 20)
+
+# contiguous
+'''
+A 'tensor'(hence not storage) whose 'values' are laid out in the storage starting from the rightmost dimension onward (that is, moving along rows for a 2D tensor) is defined as contiguous.
+'''
+points.is_contiguous() # true
+
+points_t.is_contiguous() # false, whu? check def of contiguous above
+points_t_cont = points_t.contiguous()
+points_t_cont.is_contiguous() # True
+
+points_t_cont.stride()
+points_t_cont.storage()
+points.storage() # not same as points_t_cont, because storage been reshuffled in order for elements to be laid out row-by-row, and hence the stride will also be changed to reflect the new layout
+
+
+
+
+
+
+
+
+
+
+

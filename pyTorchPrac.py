@@ -58,10 +58,24 @@ preprocess image:
 '''
 
 from PIL import Image
+import torch
 # instead of using git clone, you can add 'ss' before the 'github.com' format file url to download
 img = Image.open('../dlwpt-code/data/p1ch2/bobby.jpg')
+img.show()
 
+img_t = preprocess(img) # img_t.shape = torch.Size([3, 224, 224])
+batch_t = torch.unsqueeze(img_t, 0)
 
+resnet.eval()
+out = resnet(batch_t)
 
+with open('../dlwpt-code/data/p1ch2/imagenet_classes.txt') as f:
+    labels = [line.strip() for line in f.readlines()]
 
+# find the largest element and its index
+_, index = torch.max(out, 1)
+percentage = torch.nn.functional.softmax(out, dim = 1)[0]*100
+labels[index[0]], percentage[index[0]].item()
+
+# see the rank of top 5
 
