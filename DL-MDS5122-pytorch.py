@@ -638,6 +638,42 @@ plt.plot(t_u.numpy(), seq_model(0.1*t_u).detach().numpy(), 'kx')
 # model curve
 plt.plot(t_range.numpy(), seq_model(0.1*t_range).detach().numpy(), 'c-')
 
+# ========= play with image data ch04 =========
+import torch
+import numpy as np
+import imageio
+
+img_arr = imageio.imread('../dlwpt-code/data/p1ch4/image-dog/bobby.jpg')
+img_arr.shape
+img = torch.from_numpy(img_arr)
+out = img.permute(2, 0, 1)
+
+# create a array to store img
+batch_size = 3
+batch = torch.zeros(batch_size, 3, 256, 256, dtype = torch.uint8)
+
+import os
+data_dir = '../dlwpt-code/data/p1ch4/image-cats/'
+filenames = [name for name in os.listdir(data_dir) if os.path.splitext(name)[-1] == '.png'] # 3 .png in total in this file
+for i, filename in enumerate(filenames):
+    img_arr = imageio.imread(os.path.join(data_dir, filename))
+    img_t = torch.from_numpy(img_arr)
+    img_t = img_t.permute(2, 0, 1)
+    img_t = img_t[:3] # keep only first 3 channels
+    batch[i] = img_t
+
+# torch.mean() can only deal with float data
+batch = batch.float()
+# normalizing the data
+n_channels = batch.shape[1]
+for c in range(n_channels):
+    mean = torch.mean(batch[:, c]) # shape like torch.Size([256, 256]), it extract dims starting from the 2nd dim
+    # if we take mean wrt to a 256x256, it average out all pixel values
+    std = torch.std(batch[:, c])
+    batch[:, c] = (batch[:, c] - mean) / std
+
+
+
 
 
 
