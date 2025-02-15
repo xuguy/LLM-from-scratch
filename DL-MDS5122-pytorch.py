@@ -439,7 +439,204 @@ points_t_cont.storage()
 points.storage() # not same as points_t_cont, because storage been reshuffled in order for elements to be laid out row-by-row, and hence the stride will also be changed to reflect the new layout
 
 
+# save tensor
+with open('dl-dataset/ourpoints_tmp.t', 'wb') as f:
+    torch.save(points, f)
 
+# reload tensor
+with open('dl-dataset/ourpoints_tmp.t', 'rb') as f:
+    points_reload = torch.load(f)
+
+# ===== dive into torch.nn ======
+import torch.nn as nn
+import numpy as np
+import torch
+import torch.optim as optim
+# example:
+
+torch.set_printoptions(edgeitems=2, linewidth = 75)
+
+# toy data
+t_c = [0.5,  14.0, 15.0, 28.0, 11.0,  8.0,  3.0, -4.0,  6.0, 13.0, 21.0]
+t_u = [35.7, 55.9, 58.2, 81.9, 56.3, 48.9, 33.9, 21.8, 48.4, 60.4, 68.4]
+t_c = torch.tensor(t_c).unsqueeze(1) # <1>
+t_u = torch.tensor(t_u).unsqueeze(1) # <1>
+
+t_u.shape
+#
+n_samples = t_u.shape[0]
+n_val = int(0.2 * n_samples)
+
+shuffled_indices = torch.randperm(n_samples)
+
+train_indices = shuffled_indices[:-n_val]
+val_indices = shuffled_indices[-n_val:]
+
+train_indices, val_indices
+#
+t_u_train = t_u[train_indices]
+t_c_train = t_c[train_indices]
+
+t_u_val = t_u[val_indices]
+t_c_val = t_c[val_indices]
+
+t_un_train = 0.1 * t_u_train
+t_un_val = 0.1 * t_u_val
+
+# linear model
+# nn.Linear(in_features, out_features, bias = True)
+linear_model = nn.Linear(1, 1)
+linear_model(t_un_val)
+
+linear_model.weight
+linear_model.bias
+
+# batching inputs
+x = torch.ones(10, 1)
+linear_model(x)
+
+# constructing nn
+linear_model = nn.Linear(1, 1)
+# constructing
+optimizer = optim.SGD(linear_model.parameters(), lr= 1e-2)
+
+# you cannot see the parameter with this line alone
+linear_model.parameters()
+# use this instead
+list(linear_model.parameters())
+
+# define training loop
+def training_loop(n_epochs, optimizer, model, loss_fn, t_u_train, t_u_val, t_c_train, t_c_val):
+
+    for epoch in range(1, n_epochs + 1):
+        t_p_train = model(t_u_train)
+        loss_train = loss_fn(t_p_train, t_c_train)
+
+        t_p_val = model(t_u_val)
+        loss_val = loss_fn(t_p_val, t_c_val)
+
+        # optimizer has already been configured with linear_model
+        optimizer.zero_grad()
+        loss_train.backward()
+        optimizer.step()
+
+        if epoch == 1 or epoch % 1000 == 0:
+            print(f'Epoch {epoch}, Training loss {loss_train.item():.4f},'f'Validation loss {loss_val.item():.4f}')
+
+
+# constructing nn
+linear_model = nn.Linear(1, 1)
+# constructing
+optimizer = optim.SGD(linear_model.parameters(), lr= 1e-2)
+'''
+linear_model and optimizer are both instantiated
+'''
+
+training_loop(
+    n_epochs = 3000,
+    optimizer = optimizer,
+    model = linear_model,
+    loss_fn = nn.MSELoss(),
+    t_u_train = t_un_train,
+    t_u_val = t_un_val,
+    t_c_train = t_c_train,
+    t_c_val = t_c_val
+)
+
+print(linear_model.weight)
+print(linear_model.bias)
+
+# replacing linear class to actual nn module
+
+seq_model = nn.Sequential(nn.Linear(1,13),
+                          nn.Tanh(),
+                          nn.Linear(13,1))
+seq_model
+
+# alternatively
+[param.shape for param in seq_model.parameters()]
+
+# named parameters:
+for name, param in seq_model.named_parameters():
+    print(name, param.shape)
+'''
+0.weight torch.Size([13, 1])
+0.bias torch.Size([13])
+2.weight torch.Size([1, 13])
+2.bias torch.Size([1])
+
+为什么第一层nn.Linear(1,13)的权重的size是 (13,1)?:
+nn.Linear(1,13)的意思是in_features = 1, out_features = 13，也就是他要把一个(n,1)的输入向量变成 (n, 13)输出，第一个维度n是batchsize，，用向量的语言描述：x@W^T -> (n, 1) @ (1, 13) = (n, 13), 故 W^T = (1, 13), 故W = (13, 1)
+'''
+
+# name with our specification
+from collections import OrderedDict
+
+seq_model = nn.Sequential(OrderedDict(
+    [('hidden_linear', nn.Linear(1,8)),
+     ('hidden_activation', nn.Tanh()),
+     ('output_linear', nn.Linear(8,1))]))
+
+seq_model
+# access param with sub-module as attributes
+seq_model.hidden_linear.bias
+'''
+Sequential(
+  (hidden_linear): Linear(in_features=1, out_features=8, bias=True)
+  (hidden_activation): Tanh()
+  (output_linear): Linear(in_features=8, out_features=1, bias=True)
+)
+'''
+# more explanatory name:
+for name, param in seq_model.named_parameters():
+    print(name, param.shape)
+'''
+hidden_linear.weight torch.Size([8, 1])
+hidden_linear.bias torch.Size([8])
+output_linear.weight torch.Size([1, 8])
+output_linear.bias torch.Size([1])
+'''
+
+# inspecting parameters/ grads
+optimizer = optim.SGD(seq_model.parameters(), lr= 1e-3)
+'''
+linear_model and optimizer are both instantiated
+'''
+
+training_loop(
+    n_epochs = 5000,
+    optimizer = optimizer,
+    model = seq_model,
+    loss_fn = nn.MSELoss(),
+    t_u_train = t_un_train,
+    t_u_val = t_un_val,
+    t_c_train = t_c_train,
+    t_c_val = t_c_val
+)
+
+print('output:', seq_model(t_un_val))
+print('answer:', t_c_val)
+# access grad by named sub-module
+print('hidden:', seq_model.hidden_linear.weight.grad)
+
+# comparing to linear model
+
+from matplotlib import pyplot as plt
+
+t_range = torch.arange(20., 90.).unsqueeze(1)
+fig = plt.figure(dpi=600)
+
+plt.xlabel('Fahrenheit')
+plt.ylabel('Celsius')
+
+# actual data: circles
+plt.plot(t_u.numpy(), t_c.numpy(), 'o')
+# if you don't use detach, errors: Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead
+# model predicted data:
+plt.plot(t_u.numpy(), seq_model(0.1*t_u).detach().numpy(), 'kx')
+
+# model curve
+plt.plot(t_range.numpy(), seq_model(0.1*t_range).detach().numpy(), 'c-')
 
 
 
