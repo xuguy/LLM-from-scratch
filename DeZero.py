@@ -781,6 +781,8 @@ class Variable(object):
                     x.grad = x.grad + gx
                 if x.creator is not None:
                     add_func(x.creator)
+                    # add_func加入的是当前函数的输入变量的creator：例如，funcs=[B,C],那么C会被pop出作为当前函数，C的输入变量是a，a的creator：A 将会被加入funcs
+                    # 最精髓的就是这个add_func函数：每次添加输入变量的creator后，funcs列表都会被重新排序，以保证funcs中可能存在的多个输入变量的creator的generation较大的排在后面，pop被优先取出
     def cleargrad(self):
         self.grad = None
 
