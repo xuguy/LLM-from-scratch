@@ -1065,8 +1065,86 @@ print(x.grad) # still None
 # ====== step 19 ======让变量变得更好用：
 
 import numpy as np
+import weakref
+import contextlib
+
+class Config:
+    enable_backprop = True
+
+
+
+@contextlib.contextmanager
+def using_config(name, value):
+
+    # get the value of Config.name
+    old_value = getattr(Config, name)
+    setattr(Config, name, value)
+    try:
+        yield
+    finally:
+        setattr(Config, name, old_value)
+
+'''
+with using_config('enable_backprop', False):
+    x = Variable(np.array(2.0))
+    y = square(x)
+'''
+# make it easier to use
+def no_grad():
+    return using_config('enable_backprop', False)
+
+with no_grad():
+    x = Variable(np.array(2.0))
+    y = square(x)
+
+
+def as_array(x):
+    if np.isscalar(x):
+        return np.array(x)
+    return x
+# step 21, 运算符重载：为了让Variable能供兼容ndarray的计算
+def as_variable(obj):
+    '''
+    如果 obj 是Variable 实例， 则不做任何修改 直拨返。否则，将只转换为Variable实例
+    '''
+    if isinstance(obj, Variable):
+        return obj
+    return Variable(obj)
+
+
+class Function:
+    def __call__(self, *inputs):
+        #step21 运算符重载
+        inputs = [as_variable(x) for x in inputs]
+
+        # forward pass
+        xs = [x.data for x in inputs]
+        ys = self.forward(*xs)
+        if not isinstance(ys, tuple):
+            ys = (ys,)
+        outputs = [Variable(as_array(y)) for y in ys]
+        if Config.enable_backprop:
+        # ======== BP code ==========
+            # func的generation就是inputs的gen中最大的那个
+            self.generation = max([x.generation for x in inputs])
+            for output in outputs:
+                output.set_creator(self) # 设置前后连接
+            self.inputs = inputs 
+            # 注意观察上面的outputs是如何生成的，就可以理解下面这里的列表推导式
+            # 函数输出变量这一环节使用弱引用，打破循环应用
+            self.outputs = [weakref.ref(output) for output in outputs]# original: self.outputs = outputs
+        # ========= BP code end ==========
+        return outputs if len(outputs) > 1 else outputs[0]
+
+    def forward(self,x):
+        raise NotImplementedError('Function.forward not implemented')
+    
+    def backward(self, gy):
+        raise NotImplementedError('Function.backward not implemented')
 
 class Variable(object):
+    # step21：运算符重载，调高实例调用运算符优先级，高者优先调用
+    __array_priority__ = 10086
     def __init__(self, data):
         if data is not None:
             if not isinstance(data, np.ndarray):
@@ -1150,10 +1228,15 @@ class Variable(object):
     def __mul__(self, other):
         # 在使用 * 计算Variable类实例时，调用的就是__mul__方法，此时，运算符 * 左侧的a作为self参数，右侧的b作为other参数传给了__mul__方法，b在 * 的右侧，调用的特殊方法是__rmul__
         return mul(self, other)
+    # 运算符左右对称性改造
+    def __rmul__(self, other):
+        return mul(self, other)
     # 重载 + 运算符
     def __add__(self, other):
         return add(self, other)
-
+    
+    def __radd__(self, other):
+        return add(self, other)
     
 # test
 x = Variable(np.array([[1,2,3], [4,5,6]]))
@@ -1193,7 +1276,11 @@ class Mul(Function):
 
 # make it easy to use 
 def add(x0, x1):
+    # step21 运算符重载：与float和int一起使用
+    x1 = as_array(x1)
+
     return Add()(x0, x1)
+
 
 def square(x):
     f = Square()
@@ -1201,6 +1288,7 @@ def square(x):
     
 
 def mul(x0, x1):
+    x1 = as_array(x1)
     return Mul()(x0, x1)
 
 # test
@@ -1222,3 +1310,135 @@ print(a.grad, b.grad)
 注意，重载运载符以后要重新运行Function, Add，Square, Mul 的定义以及他们各自的该作过的易用函数版本
 '''
 
+# 测试Variable与ndarray的兼容性
+x = Variable(np.array(2.0))
+y = x + np.array(3.0)
+
+print(y)
+
+# step21 运算符重载：与float和int一起使用，改造方法见add()函数定义
+# test
+x = Variable(np.array(2.0))
+y = x+3.0
+print(y)
+
+# 运算符左右对称性兼容：见Variable内的__radd__/__rmul__
+x = Variable(np.array(2.0))
+y = 1.0+3.0*x
+
+# step21: 左项为ndarray实例的情况
+# 把实例魔法参数设高 ：__array_priotity__ = 10086，这样优先级较高的实例的相应运算符方法会被优先调用
+tmp = np.array(2.0)
+tmp.__array_priority__ # 0.0
+
+x = Variable(np.array(1.0))
+y = np.array([2.0]) + x
+
+# 更多运算符重载的实现
+'''
+__neg__ sub rsub truediv rtruediv pow
+'''
+
+class Neg(Function):
+    def forward(self, x):
+        return -x
+    
+    def backward(self, gy):
+        return -gy
+    
+def neg(x):
+    return Neg()(x)
+
+Variable.__neg__ = neg # 这样就不需要在Variable定义里面加__neg__
+
+# test
+x = Variable(np.array(2.0))
+y = -x
+print(y)
+
+class Sub(Function):
+    def forward(self, x0, x1):
+        y = x0-x1
+        return y
+    def backward(self, gy):
+        return gy, -gy
+    
+def sub(x0, x1):
+    x1 = as_array(x1)
+    return Sub()(x0, x1)
+
+def rsub(x0, x1):
+    x1 = as_array(x1)
+    return Sub()(x1, x0) # 交换x1和x0
+
+Variable.__sub__ = sub
+Variable.__rsub__ = rsub
+
+x = Variable(np.array(2.0))
+y1 = 2.0 - x
+y2 = x - 1.0
+print(y1, y2)
+
+class Div(Function):
+    def forward(self, x0, x1):
+        y = x0/x1
+        return y
+    def backward(self, gy):
+        # self.inputs来源: Div()(x0, x1)
+        x0, x1 = self.inputs[0].data, self.inputs[1].data
+        gx0 = gy/x1
+        gx1 = gy*(-x0/x1**2)
+        return gx0, gx1
+    
+def div(x0, x1):
+    x1 = as_array(x1)
+    return Div()(x0, x1)
+
+def rdiv(x0, x1):
+    x1 = as_array(x1)
+    return Div()(x1, x0)
+
+Variable.__truediv__ = div
+Variable.__rtruediv__ = rdiv
+
+x = Variable(np.array(2.0))
+y1= 1.0/x
+y2 = x/1.0
+print(y1, y2)
+
+class Pow(Function):
+    def __init__(self, c):
+        self.c = c
+    def forward(self, x):
+        y = x**self.c
+        return y
+    def backward(self, gy):
+        x = self.inputs[0].data
+        c = self.c
+        gx = c*x**(c-1)*gy
+        return gx
+    
+def pow(x, c):
+    return Pow(c)(x)
+
+Variable.__pow__ = pow
+
+x = Variable(np.array(2.0))
+y = x**3
+print(y)
+y.backward()
+x.grad
+
+
+# ====== step 23 packaging =======
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+import numpy as np
+from dezero import Variable
+
+x = Variable(np.array(1.0))
+y = 1. + x-1 # 我们已经定义了add/mul,但是没有定义sub和pow,这时候必须通过setup_variable()
+y.backward()
+print(y, x.grad)
