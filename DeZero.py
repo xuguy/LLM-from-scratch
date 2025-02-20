@@ -909,7 +909,7 @@ class Variable(object):
             # retain grad adaptation：在backwards计算完grad以后，删除输出的grad（y.grad）,保留x.grad继续反向传播
             if not retain_grad:
                 for y in f.outputs:
-                    # 注意，outputs是weakref
+                    # 注意，f.outputs 是弱引用，因为f.outputs就是Function类里面的self.outputs，which已经被改造成弱引用
                     y().grad = None
 
     def cleargrad(self):
@@ -992,6 +992,7 @@ class Config:
 
 class Function:
     def __call__(self, *inputs):
+        # forward pass
         xs = [x.data for x in inputs]
         ys = self.forward(*xs)
         if not isinstance(ys, tuple):
@@ -1060,13 +1061,164 @@ print(x.grad) # still None
 
 
 
-
-
-        
-
-            
-
-
-
-
 # %%
+# ====== step 19 ======让变量变得更好用：
+
+import numpy as np
+
+class Variable(object):
+    def __init__(self, data):
+        if data is not None:
+            if not isinstance(data, np.ndarray):
+                raise TypeError('{} is not supported'.format(type(data)))
+        self.data = data
+        self.grad = None
+        self.creator = None
+        self.generation = 0
+    
+    def set_creator(self, func):
+        self.creator = func
+        # 在正向传播(__call__)的过程中对变量对output设定generation，为什么只对output？：因为只有output会被调用set_creator
+        self.generation = func.generation + 1
+
+    def backward(self, retain_grad = False):
+        if self.grad is None:
+            self.grad = np.ones_like(self.data)
+        funcs = []
+        # 用于防止同一个函数被多次添加到funcs中，从而防止一个函数的backward方法被错误地多次调用: 图论有关的算法常用技巧，用来防止cycle
+        seen_set = set()
+
+        def add_func(f):
+            if f not in seen_set:
+                funcs.append(f)
+                seen_set.add(f)
+                funcs.sort(key=lambda x: x.generation)
+        
+        add_func(self.creator)
+
+        while funcs:
+            f = funcs.pop()
+            # gys = [output.grad for output in f.outputs]
+            gys = [output().grad for output in f.outputs]
+            gxs = f.backward(*gys)
+            if not isinstance(gxs, tuple):
+                gxs = (gxs,)
+            for x, gx in zip(f.inputs, gxs):
+                if x.grad is None:
+                    x.grad = gx
+                else:
+                    x.grad = x.grad + gx
+                if x.creator is not None:
+                    add_func(x.creator)
+            # retain grad adaptation：在backwards计算完grad以后，删除输出的grad（y.grad）,保留x.grad继续反向传播
+            if not retain_grad:
+                for y in f.outputs:
+                    # 注意，f.outputs 是弱引用，因为f.outputs就是Function类里面的self.outputs，which已经被改造成弱引用
+                    y().grad = None
+
+    def cleargrad(self):
+        self.grad = None
+
+    # 新增shape\ndim\size等方法，让Variable实例和ndarray实例一样好用
+    @property
+    def shape(self):
+        return self.data.shape
+    
+    @property
+    def ndim(self):
+        return self.data.ndim
+    
+    @property
+    def size(self):
+        return self.data.size
+    @property
+    def dtype(self):
+        return self.data.dtype
+    
+    def __len__(self):
+        return len(self.data)# 返回data dim=0 的元素数量
+
+    # 重写__repr__方法，自定义print(Variable)输出的内容
+    def __repr__(self):
+        if self.data is None:
+            return 'variable(None)'
+        
+        p = str(self.data).replace('\n', '\n' + ' '*9)
+        return 'variable(' + p +')'
+    
+    # 重载 * 运算符
+    def __mul__(self, other):
+        # 在使用 * 计算Variable类实例时，调用的就是__mul__方法，此时，运算符 * 左侧的a作为self参数，右侧的b作为other参数传给了__mul__方法，b在 * 的右侧，调用的特殊方法是__rmul__
+        return mul(self, other)
+    # 重载 + 运算符
+    def __add__(self, other):
+        return add(self, other)
+
+    
+# test
+x = Variable(np.array([[1,2,3], [4,5,6]]))
+len(x) # len() 自动调用Variable实例的 __len__方法
+
+print(x)
+
+# =========== step 20 ============
+# 运算符重载
+
+class Add(Function):
+    def forward(self, x0, x1):
+        y = x0 + x1
+        return y # 返回一个元素而不需要返回元组
+    
+    def backward(self, gy):
+        return gy, gy
+
+class Square(Function):
+    def forward(self, x):
+        y = x**2
+        return y
+    
+    def backward(self, gy):
+        x = self.inputs[0].data
+        gx = 2*x*gy
+        return gx
+
+class Mul(Function):
+    def forward(self, x0, x1):
+        y = x0*x1
+        return y
+    def backward(self, gy):
+        # 因为Mul继承了Function类，因此也继承了Function类的inputs/data
+        x0, x1 = self.inputs[0].data, self.inputs[1].data
+        return gy*x1, gy*x0
+
+# make it easy to use 
+def add(x0, x1):
+    return Add()(x0, x1)
+
+def square(x):
+    f = Square()
+    return f(x)
+    
+
+def mul(x0, x1):
+    return Mul()(x0, x1)
+
+# test
+a = Variable(np.array(3.0))
+b = Variable(np.array(2.0))
+c = Variable(np.array(1.0))
+
+y = add(mul(a, b), c)
+
+y.backward()
+
+print(y, a.grad, b.grad)
+
+# 我们还是觉得 add(mul(a, b), c) 这种写法太麻烦，有没有办法可以直接用 a*b+c这种自然的表达方法呢？
+y = a*b+c
+y.backward()
+print(a.grad, b.grad)
+'''
+注意，重载运载符以后要重新运行Function, Add，Square, Mul 的定义以及他们各自的该作过的易用函数版本
+'''
+
