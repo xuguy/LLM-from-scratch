@@ -76,3 +76,9 @@ behind `Word2Vec` is that words that appear in similar contexts tend to have sim
 $$\frac{\partial L}{\partial x} = \frac{\partial L}{\partial Y} (dout)\cdot W^T$$
 
 $$\frac{\partial L}{\partial W} = X^T \cdot \frac{\partial L}{\partial Y} (dout)$$
+
+### Define by run
+- 什么是静态计算图？
+  静态计算图(define and run)的框架需要在流转数据（加减乘除等对数据的运算）之前定义计算图，在流转数据的过程中，计算图的结构不能改变，并且需要根据语言的不同，定义不同的运算语法。
+- 什么是动态计算图？
+  ![](mdfig\2025-02-21-22-48-45.png)

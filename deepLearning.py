@@ -856,4 +856,10 @@ class AdaGrad:
             #非RMSPROP
             self.h[key] += grads[key]*grads[key]
             params[key] -= self.lr*grads[key]/(np.sqrt.h[key] + 1e-7)
-# git test
+'''
+ada grad & weight deccayintuition:
+ada = adaptive learning rate，这个adaptive指的是会根据不同的维度（也就是向量的元素）给每个维度单独调整一个学习率
+原始的adagrad会对过去所有的梯度做平方和然后用更新，而改进后的RMSProp会遗忘掉前面的梯度
+self.lr*grads[key]/(np.sqrt.h[key] + 1e-7) 注意，最后这个1e-7是通过广播机制加到np.sqrt.h[key]的每一个元素上去的。
+
+'''

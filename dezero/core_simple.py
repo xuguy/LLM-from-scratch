@@ -37,11 +37,12 @@ class Function:
 class Variable(object):
     # step21：运算符重载，调高实例调用运算符优先级，高者优先调用
     __array_priority__ = 10086
-    def __init__(self, data):
+    def __init__(self, data, name=None):
         if data is not None:
             if not isinstance(data, np.ndarray):
                 raise TypeError('{} is not supported'.format(type(data)))
         self.data = data
+        self.name = name
         self.grad = None
         self.creator = None
         self.generation = 0
