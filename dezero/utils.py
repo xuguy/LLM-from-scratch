@@ -52,6 +52,7 @@ def plot_dot_graph(output, verbose=True, to_file = 'graph.png'):
     # 获取dot数据并保存至文件
     # os.path.expanduser('~\\123') 返回'C:\\Users\\xuguy\\123'
     # 其作用就是把 ~ 替换成user路径
+    # tmp_dir可以设置在任何地方，书作者用的mac，直接apt安装的graphviz，因此把tmp_dir设定在user目录，这是不必要的
     tmp_dir = os.path.join(os.path.expanduser('~'), '.dezero')
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)
