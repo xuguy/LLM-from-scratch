@@ -1492,10 +1492,9 @@ def f(x):
 
 x = Variable(np.array([1.0]))
 y = f(x)
-# create_graph = True ->启动反向传播
-y.backward(create_graph=False)
+# create_graph = True ->启动2次反向传播以计算高阶导数
+y.backward(create_graph=True)
 print(x.grad)
-
 
 gx = x.grad
 x.cleargrad()
@@ -1503,12 +1502,61 @@ gx.backward()
 print(x.grad)
 
 
+# test: try to cal higher order grad of sin/cos
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+import numpy as np
+from dezero import Variable
+import dezero.functions as F
+from dezero.utils import plot_dot_graph
 
+x = Variable(np.array([1.0]))
+y = F.tanh(x)
 x.name = 'x'
 y.name = 'y'
-z.name = 'z'
-plot_dot_graph(z, verbose=False, to_file='goldstein.png')
+y.backward(create_graph=True)
+
+iters = 0 # 0=1阶导数，1=2阶导数
+
+for i in range(iters):
+    gx = x.grad
+    x.cleargrad()
+    gx.backward(create_graph=True)
+
+# 绘制计算图
+gx = x.grad
+gx.name = 'gx' + str(iters+1)
+plot_dot_graph(gx, verbose = False, to_file='tanh.png')
+
+# example2: step36中的example：导数作为中间变量进入别的函数
+x = Variable(np.array([2.5]))
+y = x**2
+y.backward(create_graph=False)
+gx = x.grad
+x.cleargrad()
+# x.cleargrad()放在哪里都行，只要放在y.backward()后，以及z.backward()前，也即相邻的两次backward前，即可。
+z = gx**3+y
+
+# 如果我们在上面的y.backward(create_graph=False)，即在第一次反向传播的计算中中不创建计算图，那么第一次反向传播中gx = dy/dx = 2*x这部分运算就不会有计算图，也就是说，gx和x之间的连接不存在，因此在下面z.backward()，尽管z=gx**3+y，但是gx和x没有联系，因此x.grad=0+dy/dx=2*x
+z.backward()
+print(x.grad)
+
+# test of multi-var
+tmp = np.array([[1,2,3],[4,5,6]])
+for i in tmp:
+    print(i)
+
+tmp2 = Variable(tmp)
+z = tmp2**2
+z.backward()
+tmp2.grad
+'''
+关于多元函数以及向量、矩阵形式的计算与反向传播，目前还缺少针对矩阵运算的函数定义，因此暂时还无法处理矩阵形式的反向传播
+'''
+
+
 
 
 

@@ -82,3 +82,15 @@ $$\frac{\partial L}{\partial W} = X^T \cdot \frac{\partial L}{\partial Y} (dout)
   静态计算图(define and run)的框架需要在流转数据（加减乘除等对数据的运算）之前定义计算图，在流转数据的过程中，计算图的结构不能改变，并且需要根据语言的不同，定义不同的运算语法。
 - 什么是动态计算图？
   ![](mdfig\2025-02-21-22-48-45.png)
+
+
+### coding 技巧
+- `W, = self.params`: 看上去和`W = self.params[0]` 等价，但实际上，`W, = self.params`只有当`self.params`里面含有1个元素时不会报错，如果`self.params`里面有多个元素，就会报错。This syntax is useful when you want to enforce that an iterable contains exactly one element and avoid accidental mistakes of using an incorrect structure.
+- `self.grads[0][...] = dW`
+  - `self.grads` is a list that stores the gradients.
+  - `self.grads[0]` is a NumPy array initialized as `np.zeros_like(W)` in `__init__`.
+  - `[...]` (Ellipsis) means "assign to all elements" within the array.
+  - `dW` is the newly computed gradient.
+  - 见下例子：
+
+![](mdfig\2025-02-22-23-17-06.png) 

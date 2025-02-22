@@ -22,11 +22,12 @@ class Function:
             # func的generation就是inputs的gen中最大的那个
             self.generation = max([x.generation for x in inputs])
             for output in outputs:
-                output.set_creator(self) # 设置前后连接
+                output.set_creator(self) # 设置前后连接，self就是函数本身
             self.inputs = inputs 
             # 注意观察上面的outputs是如何生成的，就可以理解下面这里的列表推导式
             # 函数输出变量这一环节使用弱引用，打破循环应用
             self.outputs = [weakref.ref(output) for output in outputs]# original: self.outputs = outputs
+            # self.outputs保存了反向传播需要的东西
         # ========= BP code end ==========
         return outputs if len(outputs) > 1 else outputs[0]
     def forward(self,x):
@@ -92,6 +93,7 @@ class Variable(object):
             # retain grad adaptation：在backwards计算完grad以后，删除输出的grad（y.grad）,保留x.grad继续反向传播
             if not retain_grad:
                 for y in f.outputs:
+                    # f.outputs里包括了除了最开始输入的x以外的所有中间变量Variable
                     # 注意，f.outputs 是弱引用，因为f.outputs就是Function类里面的self.outputs，which已经被改造成弱引用
                     y().grad = None
 
@@ -156,7 +158,7 @@ class Square(Function):
     def backward(self, gy):
         # modified
         # x = self.inputs[0].data
-        x = self.inputs[0]
+        x, = self.inputs
         gx = 2*x*gy
         return gx
 
@@ -172,6 +174,7 @@ class Mul(Function):
         x0, x1 = self.inputs
         return gy*x1, gy*x0
 
+# no need to modify
 class Neg(Function):
     def forward(self, x):
         return -x
@@ -209,7 +212,7 @@ class Pow(Function):
     def backward(self, gy):
         # modified
         # x = self.inputs[0].data
-        x = self.inputs[0]
+        x, = self.inputs
         c = self.c
         gx = c*x**(c-1)*gy
         return gx
