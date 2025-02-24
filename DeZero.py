@@ -1508,7 +1508,7 @@ if '__file__' in globals():
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import numpy as np
-from dezero import Variable
+from dezero import Variable, as_array
 import dezero.functions as F
 from dezero.utils import plot_dot_graph
 
@@ -1555,9 +1555,33 @@ tmp2.grad
 '''
 关于多元函数以及向量、矩阵形式的计算与反向传播，目前还缺少针对矩阵运算的函数定义，因此暂时还无法处理矩阵形式的反向传播
 '''
+# test: try to cal higher order grad of sin/cos
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import numpy as np
+from dezero import Variable
+from dezero import as_variable
+import dezero.functions as F
+# from dezero.utils import plot_dot_graph
 
+x = Variable(np.array([[1,2,3],[4,5,6]]))
+y = F.reshape(x, (6,))
+y.backward()
+print(x.grad)
+'''
+variable([[1 1 1]
+          [1 1 1]])
+因为reshape不对输入进行任何树枝上的修改，仅变换形状，因此x.grad和x具有相同的形状，就像reshape从来没发生过一样
+'''
 
+# 测试Variable中的 reshape方法
+# all make sense. remember, batched data always in the 0th dim of Variable
+xs = Variable(np.random.randn(2,2,3))
 
+y = xs.transpose((1,0,2))
+y.backward()
+xs.grad
 
 
 

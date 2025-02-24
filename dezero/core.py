@@ -1,11 +1,15 @@
 import numpy as np
 import weakref
 import contextlib
+import dezero
 
 class Config:
     enable_backprop = True
 
 class Function:
+    '''
+    DeZero函数的输入是Variable实例或ndarray实例，输出是Variable实例。如果函数继承自Function类（如Reshape)，ndarray实例会在该函数类的__call__方法中自动转换为Variable实例。
+    '''
     def __call__(self, *inputs):
         #step21 运算符重载
         inputs = [as_variable(x) for x in inputs]
@@ -37,6 +41,7 @@ class Function:
         raise NotImplementedError('Function.backward not implemented')
 
 class Variable(object):
+
     # step21：运算符重载，调高实例调用运算符优先级，高者优先调用
     __array_priority__ = 10086
     def __init__(self, data, name=None):
@@ -140,6 +145,39 @@ class Variable(object):
     
     def __radd__(self, other):
         return add(self, other)
+    
+    def reshape(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = shape[0]
+        return dezero.functions.reshape(self, shape)
+
+    # less general transpose
+    # def transpose(self):
+    #     return dezero.funcstions.transpose(self)
+
+    # more general transpose
+    def transpose(self, *axes):
+        if len(axes) == 0:
+            axes = None
+        elif len(axes) == 1:
+            if isinstance(axes[0], (tuple, list)) or axes[0] is None:
+                axes = axes[0]
+        
+        return dezero.functions.transpose(self, axes)
+    # 上面这个transpose的构造有点tricky，我们来看数据x是如何流动的
+    # 首先 从变量实例call：Variable.transpose((1,0,2))
+    # Variable.transpose对传进来的axes进行处理（兼容各种不同的写法），把处理过后的axes以及数据本身(self)传入dezero.functions.transpose
+    # 接着由functions.transpose内部实例化一个Transpose类
+    # 因为Transpose类是Function类的子类，因此实际执行的是dezero.core.Function类里面的__call__方法
+    # Variable进入__call__方法后首先会初始化self.axes=axes，因为Variable里面的tensor是以[ndarray]的列表的形式存在的，当__call__运行到ys.forward(*xs)后，list[ndarray]又会被解包，变成一个一个的ndarray，forward里面又是y = x.transpose(self.axes)，也就是用的ndarray的transpose方法，这才把Variable成功transpose
+    # # all make sense. remember, batched data always in the 0th dim of Variable: xs = [Variable(np.random.randn(2,2,3)).data], xs can be viewed as a batchsize=2, 2-d matrix
+    
+    # same for 2 axes or multi axes
+    @property
+    def T(self):
+        # so that we can transpose with Variable.T
+        return dezero.functions.transpose(self)
+
 
 # no need to modified add method
 class Add(Function):
@@ -307,5 +345,7 @@ def setup_variable():
     Variable.__truediv__ = div
     Variable.__rtruediv__ = rdiv
     Variable.__pow__ = pow
+
+
     
 
