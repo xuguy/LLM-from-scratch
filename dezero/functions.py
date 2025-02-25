@@ -1,6 +1,11 @@
 import numpy as np
 from dezero.core import Function
 
+'''
+我们会发现dezero.functions里面函数大致分为两类：一类函数的反向传播的计算涉及到了正向传播的输入或者输出，需要保存inputs/outputs；另一类函数的反向传播只对回传过来的梯度gy做变形处理
+'''
+
+# ========= basic functions: sin/cos/tanh/exp/log
 class Sin(Function):
 
     def forward(self, x):
@@ -40,6 +45,20 @@ class Tanh(Function):
     
 def tanh(x):
     return Tanh()(x)
+
+class Exp(Function):
+    def forward(self, x):
+        y = np.exp(x)
+        return y
+    def backward(self, gy):
+        y = self.outputs[0]() # weakref
+        gx = gy*y
+        return gx
+def exp(x):
+    return Exp()(x)
+
+
+#============= shape =================
 
 class Reshape(Function):
     def __init__(self, shape):
@@ -207,4 +226,45 @@ class MeanSquaredError(Function):
 def mean_squared_error(x0, x1):
     return MeanSquaredError()(x0, x1)
 
-# 为什么新的MeanSquaredError的内存效率更高？因为新的MSE的计算图更简洁，因此有更少的中间变量:准确的说，新的计算图中没有中间变量，我们把MSE看成一个node，这个node接收2个输入x0和x1，前向传播时x0和x1计算产生的中间数据只会存在于MSE里面的forward方法中，一旦离开forward的作用范围，就马上从内存中被清除，但我们需要的的链接（inputs<->creator<->outputs）已经成功建立，反向传播也同理。
+# 为什么新的MeanSquaredError的内存效率更高？因为ndarray这个数据结构被高度优化过，ndarray类型数据一旦离开.forward的作用域，就会被清除。而我们前面定义的mse_simple因为用的是Variable变量做计算，因此有相当一部分中间变量被保留。
+# 函数的输出作为 Variable 实例记录在计算图中，也就是说，在计算图存在期间，Variable实例和它内部的数据（ndarray）会保存在内存中。原来的实现方法每一个中间变量都是Variable实例，因此内存开销较大。
+
+#而继承Function类实现的方法，中间结果没有座位Variable实例存储在内存中，所以在forward中使用的数据在正向传播完成后会立即被删除。
+
+# 仿射变换，简单版
+def linear_simple(x, W, b=None):
+    t = matmul(x, W)
+    if b is None:
+        return t
+    y = t+b
+    t.data = None # release t.data(ndarray) for memory efficiency
+    # 注意，只有t.data会被删除，而因为反向传播需要inputs/outputs/creator等数据，这些数据会被保留
+    return y
+
+# 放射变化，高效版
+class Linear(Function):
+    def forward(self, x, W, b):
+        y = x.dot(W)
+        if b is not None:
+            y += b
+        return y
+    
+    def backward(self, gy):
+        x, W, b = self.inputs
+        # 如果有偏置项，那么b的反向传播只接收gy即可，sum_to是考虑了broadcast_to的反向传播
+        gb = None if b.data is None else sum_to(gy, b.shape)
+
+        gx = matmul(gy, W.T)
+        gW = matmul(x.T, gy)
+
+        return gx, gW, gb
+
+def linear(x, W, b=None):
+    return Linear()(x, W, b)
+
+
+# ================= neural network part==================
+def sigmoid_simple(x):
+    x = as_variable(x)
+    y = 1/(1+exp(-x))
+    return y
