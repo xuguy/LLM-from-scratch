@@ -177,6 +177,9 @@ class Variable(object):
     def T(self):
         # so that we can transpose with Variable.T
         return dezero.functions.transpose(self)
+     #使sum函数也可以作为Variable的方法使用
+    def sum(self, axis=None, keepdims=False):
+        return dezero.functions.sum(self, axis, keepdims)
 
 
 # no need to modified add method

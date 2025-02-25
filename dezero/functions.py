@@ -90,3 +90,79 @@ def transpose(x, axes=None):
     return Transpose(axes)(x)
 
 
+class BroadcastTo(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = np.broadcast_to(x, self.shape)
+        return y
+
+    def backward(self, gy):
+        # 
+        gx = sum_to(gy, self.x_shape)
+        return gx
+
+def broadcast_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return BroadcastTo(shape)(x)
+
+from dezero import utils
+
+class SumTo(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        # 此时 x从 __call__中传来，已经是ndarray
+        self.x_shape = x.shape
+        # 对输入x进行求和，输出和self.shape一样shape的tensor
+        # 这里导入了专门处理ndarray数据的utils.sum_to()
+        y = utils.sum_to(x, self.shape)
+        return y
+    def backward(self, gy):
+        # 把gy复制成(broadcast)self.x_shape:
+        # Sum (缩小，也即求和->减少维数) 的反向是扩（复制，也即broadcast）
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+    
+def sum_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return SumTo()(x)
+
+# 旧的简易版sum，只支持简单sum（全部sum成标量）
+# class Sum(Function):
+#     def forward(self, x):
+#         self.x_shape = x.shape
+#         y = x.sum()
+#         return y
+    
+#     def backward(self, gy):
+#         gx = broadcast_to(gy, self.x_shape)
+#         return gx
+    
+# def sum(x):
+#         return Sum()(x)
+    
+
+class Sum(Function):
+    def __init__(self, axis, keepdims):
+        self.axis = axis
+        self.keepdims = keepdims
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = x.sum(axis=self.axis, keepdims=self.keepdims)
+        return y
+    
+    def backward(self, gy):
+        gy = utils.reshape_sum_backward(gy,self.x_shape, self.axis, self.keepdims) # 调整gy的shape以适应不同的sum法
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+def sum(x, axis = None, keepdims=False):
+    return Sum(axis, keepdims)(x)
+
+

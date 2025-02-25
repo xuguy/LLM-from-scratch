@@ -1578,10 +1578,39 @@ variable([[1 1 1]
 # 测试Variable中的 reshape方法
 # all make sense. remember, batched data always in the 0th dim of Variable
 xs = Variable(np.random.randn(2,2,3))
-
+x = np.random.randn(2,2,3)
 y = xs.transpose((1,0,2))
 y.backward()
 xs.grad
+
+
+# 测试step 39中实现的扩展版Sum
+# test: try to cal higher order grad of sin/cos
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import numpy as np
+from dezero import Variable
+from dezero import as_variable
+import dezero.functions as F
+
+# test code for sum() backward# 1
+x = Variable(np.array([[1,2,3],[4,5,6]]))
+y = F.sum(x, axis=0) #shape (3, )
+y.backward()
+print(y)
+x.grad
+
+# test code for sum() backward # 2
+x = Variable(np.random.rand(2,3,4,5))
+y = x.sum(keepdims=True)
+y # which is a scalar with dims preserved
+y.shape
+
+# if keepdims=False by default, the resulted y will be a col vector, which is not desired
+
+
+
 
 
 
