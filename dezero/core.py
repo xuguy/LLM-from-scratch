@@ -185,11 +185,18 @@ class Variable(object):
 # no need to modified add method
 class Add(Function):
     def forward(self, x0, x1):
+        # 把原输入的shape保存下来，反向的时候会用，因为加法会损失信息，所以要保存
+        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0 + x1
         return y # 返回一个元素而不需要返回元组
     
     def backward(self, gy):
-        return gy, gy
+        gx0, gx1 = gy, gy
+        # 如果两个值不等，那就需要broadcast，broadcast_to的反向是sum_to因此需要用sum_to见page 273图40-1
+        if self.x0_shape != self.x1_shape:
+            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
+            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+        return gx0, gx1
 
 class Square(Function):
     def forward(self, x):
@@ -206,6 +213,7 @@ class Square(Function):
 # modified Variable
 class Mul(Function):
     def forward(self, x0, x1):
+        # 这里不需要像Add那样保存x0, x1的shape是因为这样内存消耗少，反正backward的计算都需要直接用到x0和x1本身而不仅仅是他俩的shape，那干脆backward再引进x0,x1
         y = x0*x1
         return y
     def backward(self, gy):
@@ -213,7 +221,13 @@ class Mul(Function):
         # modified
         # x0, x1 = self.inputs[0].data, self.inputs[1].data
         x0, x1 = self.inputs
-        return gy*x1, gy*x0
+        gx0 = gy*x1
+        gx1 = gy*x0
+        if x0.shape != x1.shape:
+            gx0 = dezero.functions.sum_to(gx0, x0.shape)
+            gx1 = dezero.functions.sum_to(gx1, x1.shape)
+        x0, x1 = self.inputs
+        return gx0, gx1
 
 # no need to modify
 class Neg(Function):
@@ -226,10 +240,18 @@ class Neg(Function):
 # no need to modify
 class Sub(Function):
     def forward(self, x0, x1):
+        self.x0_shape, self.x1_shape = x0.shape, x1.shape
         y = x0-x1
         return y
+    
     def backward(self, gy):
-        return gy, -gy
+        gx0 = gy
+        gx1 = -gy
+        if self.x0_shape != self.x1_shape:  # for broadcast
+            gx0 = dezero.functions.sum_to(gx0, self.x0_shape)
+            gx1 = dezero.functions.sum_to(gx1, self.x1_shape)
+
+        return gx0, gx1
     
 class Div(Function):
     def forward(self, x0, x1):
@@ -240,9 +262,13 @@ class Div(Function):
         # x0, x1 = self.inputs[0].data, self.inputs[1].data
         # modified
         x0, x1 = self.inputs
-        gx0 = gy/x1
-        gx1 = gy*(-x0/x1**2)
+        gx0 = gy / x1
+        gx1 = gy * (-x0 / x1 ** 2)
+        if x0.shape != x1.shape:  # for broadcast
+            gx0 = dezero.functions.sum_to(gx0, x0.shape)
+            gx1 = dezero.functions.sum_to(gx1, x1.shape)
         return gx0, gx1
+
 
 class Pow(Function):
     def __init__(self, c):

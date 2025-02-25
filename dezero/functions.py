@@ -100,7 +100,8 @@ class BroadcastTo(Function):
         return y
 
     def backward(self, gy):
-        # 
+        # 关于为什么反向传播是sum_to：broadcast本质是复制向量，因此复制后的向量的当梯度回传给被复制的向量x时，会多次传播到x
+        # 多次传播到同一个x的结果就是梯度相加
         gx = sum_to(gy, self.x_shape)
         return gx
 
@@ -131,7 +132,7 @@ class SumTo(Function):
 def sum_to(x, shape):
     if x.shape == shape:
         return as_variable(x)
-    return SumTo()(x)
+    return SumTo(shape)(x)
 
 # 旧的简易版sum，只支持简单sum（全部sum成标量）
 # class Sum(Function):
@@ -166,3 +167,44 @@ def sum(x, axis = None, keepdims=False):
     return Sum(axis, keepdims)(x)
 
 
+# MatMul反向传播的实现
+class MatMul(Function):
+    def forward(self, x, W):
+        # x和W可能是框架中的张量对象（而非普通NumPy数组），其.dot()方法将要被重写。直接调用x.dot(W)会触发自定义的矩阵乘法操作（即MatMul类），从而在正向传播时记录计算图，为反向传播的梯度计算提供支持。若使用np.dot(x, W)，则会绕过框架的自动微分机制，导致梯度无法正确计算。
+        y = x.dot(W)
+        return y
+    
+    def backward(self, gy):
+        x, W = self.inputs
+        gx = matmul(gy, W.T)
+        gW = matmul(x.T, gy)
+        return gx, gW
+    
+def matmul(x, W):
+    return MatMul()(x, W)
+
+# old, low ram efficiency version
+def mean_squared_error_simple(x0, x1):
+    diff = x0 - x1 # both x0 and x1 are Variable dtype
+    return sum(diff**2) / len(diff)
+
+# new, high efficiency version
+class MeanSquaredError(Function):
+    def forward(self, x0, x1):
+        diff = x0-x1
+        # 这里用的是ndarray的方法
+        y = (diff**2).sum()/len(diff)
+        return y
+    
+    def backward(self, gy):
+        # 反向传播的实现就是通过式子求导后将其编写成代码
+        x0, x1 = self.inputs
+        diff = x0-x1
+        gx0 = gy*diff*(2./len(diff)) # x0的grad
+        gx1 = -gx0 # x1的grad
+        return gx0, gx1
+    
+def mean_squared_error(x0, x1):
+    return MeanSquaredError()(x0, x1)
+
+# 为什么新的MeanSquaredError的内存效率更高？因为新的MSE的计算图更简洁，因此有更少的中间变量:准确的说，新的计算图中没有中间变量，我们把MSE看成一个node，这个node接收2个输入x0和x1，前向传播时x0和x1计算产生的中间数据只会存在于MSE里面的forward方法中，一旦离开forward的作用范围，就马上从内存中被清除，但我们需要的的链接（inputs<->creator<->outputs）已经成功建立，反向传播也同理。

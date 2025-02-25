@@ -1585,7 +1585,14 @@ xs.grad
 
 
 # 测试step 39中实现的扩展版Sum
-# test: try to cal higher order grad of sin/cos
+
+y = x.sum(keepdims=True)
+y # which is a scalar with dims preserved
+y.shape
+
+# if keepdims=False by default, the resulted y will be a col vector, which is not desired
+
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -1602,15 +1609,64 @@ print(y)
 x.grad
 
 # test code for sum() backward # 2
-x = Variable(np.random.rand(2,3,4,5))
-y = x.sum(keepdims=True)
-y # which is a scalar with dims preserved
-y.shape
+y = Variable(np.random.randn(3,5))
+x = Variable(np.random.randn(2,3))
+z = F.matmul(x,y)
+z.backward()
+x.grad
+y.grad
 
-# if keepdims=False by default, the resulted y will be a col vector, which is not desired
+#%%
+
+# 简单的线性回归模型，用dezero实现：
+
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import numpy as np
+from dezero import Variable
+from dezero import as_variable
+import dezero.functions as F
+
+#%%
+np.random.seed(0)
+x = np.random.rand(100, 1)
+y = 5 + 2*x + np.random.rand(100, 1)
+# x, y = Variable(x), Variable(y)
+
+W = Variable(np.zeros((1,1))) # (1,1)
+b = Variable(np.zeros(1)) # (1,)
+
+def predict(x):
+    y = F.matmul(x,W) + b
+    return y
+
+
+lr = 10
+iters = 100
+
+for i in range(iters):
+
+    # forward
+    y_pred = predict(x)
+    loss = F.mean_squared_error(y, y_pred)
+
+    # cleargrad before backward
+    W.cleargrad()
+    b.cleargrad()
+    loss.backward()
+
+    W.data -= W.grad.data/lr
+    b.data -= b.grad.data/lr
+
+    print(W,b,loss)
 
 
 
 
 
 
+
+
+
+# %%
