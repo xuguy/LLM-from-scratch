@@ -18,6 +18,8 @@ else:
     from dezero.core import as_array
     from dezero.core import as_variable
     from dezero.core import setup_variable
+    from dezero.core import Parameter
+    from dezero.layers import Layer
 
 
 # 为什么用dezero.core_simple？这个__init__文件不是已经和core_simple.py在同一个目录下吗？

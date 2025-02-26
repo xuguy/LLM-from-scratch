@@ -1668,9 +1668,9 @@ import numpy as np
 from dezero import Variable
 import dezero.functions as F
 
-np.random.seed(1337)
-x = np.random.randn(100, 1)
-y = np.sin(2*np.pi*x) + np.random.randn(100, 1)
+np.random.seed(0)
+x = np.random.rand(100, 1)
+y = np.sin(2*np.pi*x) + np.random.rand(100, 1)
 
 # initialize weights
 I, H, O = 1, 10, 1 # input hidden output layers
@@ -1687,7 +1687,7 @@ def predict(x):
     return y
 
 lr = 0.2
-iters = 1000
+iters = 10000
 
 for i in range(iters):
     y_pred = predict(x)
@@ -1702,15 +1702,196 @@ for i in range(iters):
     b1.data -= lr*b1.grad.data
     W2.data -= lr*W2.grad.data
     b2.data -= lr*b2.grad.data
+    if i % 1000 == 0:
+        print(loss)
+
+# plot to check how well the nn fit to toy sin() data
+import matplotlib.pyplot as plt
+x_t = np.linspace(0,1,100).reshape(100,1)
+y_pred = predict(x_t).data
+
+# pretty well indeed
+plt.plot(x_t, y_pred)
+
+# layer class
+import numpy as np
+from dezero import Variable
+import dezero.functions as F
+from dezero import Parameter
+from dezero.layers import Layer
+
+
+
+layer = Layer()
+layer.p1 = Parameter(np.array(1))
+layer.p2 = Parameter(np.array(2))
+layer.p3 = Variable(np.array(3))
+layer.p4 = 'test'
+
+print(layer._params)
+'''
+out:
+{'p2', 'p1'}
+'''
+
+for name in layer._params:
+    print(name, layer.__dict__[name])
+'''
+out:
+{'p2', 'p1'}
+p2 variable(2)
+p1 variable(1)
+'''
+
+# 使用Linear类实现神经网络：
+#%%
+import numpy as np
+from dezero import Variable, Layer
+from dezero.models import Model
+import dezero.functions as F
+import dezero.layers as L
+
+
+# toy data
+np.random.seed(0)
+x = np.random.rand(100,1)
+y = np.sin(2*np.pi*x) + np.random.rand(100,1)
+
+# (old)assign out_size to Linear layer
+# l1 = L.Linear(10)
+# l2 = L.Linear(1)
+
+# 将Layer作为参数加入Layer的_params中后，我们就可以把作为Layer的Linear实例（L.Linear)传入Layer的实例model的_params中统一管理
+model = Layer()
+model.l1 = L.Linear(5)
+model.l2 = L.Linear(3)
+
+# 定义网络结构：
+def predict(model, x):
+    # 所有的参数都在model中统一管理
+    y = model.l1(x)
+    y = F.sigmoid_simple(y)
+    y = model.l2(y)
+    return y
+
+# 测试访问所有参数并重置所有参数的梯度：
+for p in model.params():
+    #由于params()是yield构造的生成器，因此需要逐个访问
+    print(p)
+
+model.cleargrads()
+
+lr = 0.2
+iters = 1000
+
+for i in range(iters):
+    y_pred = predict(model, x)
+    loss = F.mean_squared_error(y, y_pred)
+
+    # l1.cleargrads()
+    # l2.cleargrads()
+    model.cleargrads()
+    loss.backward()
+
+    
+    for p in model.params():
+        p.data -= lr*p.grad.data
+
     if i % 100 == 0:
         print(loss)
 
+# 将上面的步骤抽象为一种更便捷的方法：将模型定义为一个继承Layer类的类：
+#%%
+class TwoLayerNet(Model):
+    def __init__(self, hidden_size, out_size):
+        super().__init__()
+        self.l1 = L.Linear(hidden_size)
+        self.l2 = L.Linear(out_size)
+
+    def forward(self, x):
+        #定义模型的网络结构
+        y = F.sigmoid(self.l1(x))
+        y = self.l2(y)
+        return y
+
+# toy data: our old friend sin()
+np.random.seed(0)
+x = np.random.rand(100,1)
+y = np.sin(2*np.pi*x) + np.random.rand(100,1)
+
+hidden_size = 5
+out_size = 3
+lr = 0.2
+iters = 1000
+model = TwoLayerNet(hidden_size,out_size)
+model.plot(x)
+# model.cleargrads()
+
+for i in range(iters):
+    #forward
+    y_pred = model(x)
+    # cal loss
+    loss = F.mean_squared_error(y, y_pred)
+    #cleargrads before backwards
+    model.cleargrads()
+    loss.backward()
+    #更新模型参数
+    for p in model.params():
+        p.data -= lr*p.grad.data
+
+    if i % 100 == 0:
+        print(loss)
+
+# 测试 MLP模型
+import numpy as np
+from dezero import Variable, Layer
+from dezero.models import Model, MLP
+import dezero.functions as F
+import dezero.layers as L
+model = MLP((10,20,30,40,1)) #5层（4个hidden1 个out）
+# 在传入数据前模型不会初始化参数，参数全都是None
+# next(model.params())
+
+# 传入toy data
+np.random.seed(0)
+x = np.random.rand(100,1)
+y_pred = model(x)
+print(y_pred)
+model._params #{'l0', 'l1', 'l2', 'l3', 'l4'}
+model.__dict__['l0'].W.shape # (1, 10)
 
 
+for i, w in enumerate(model.params()):
+    print(f'{i}-{w.shape}: {w}')
 
 
+# 测试__setattr__以及__dicit__的行为
+#%%
+class nametest:
+    def __init__(self, name='name1'):
+        self.name = name
+
+tmp = nametest()
+tmp.__dict__ # out: {'name': 'name1'}
+
+# 从上面这个例子可以看出，实例tmp的所有变量的值都会被__setattr__以{name:value}的形式存到__dict__中
+
+# 当set中有不同的数据结构时，会产生随机性:每次重启kernel都不一样
+tmp2 = iter(set([1,3,2,4,'5','6']))
+next(tmp2)
+tmp = set([1,3,2,4,'5','6'])
+
+def fun(tmp):
+    for i in tmp:
+        print(i)
+        yield i
+
+def func(tmp):
+    for i in tmp:
+        print(i)
+        yield from fun(tmp)
+
+tmp3 = func(tmp)
+next(tmp3)
 
 
-
-
-# %%
