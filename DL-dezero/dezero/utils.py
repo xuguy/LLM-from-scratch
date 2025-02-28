@@ -159,6 +159,7 @@ def reshape_sum_backward(gy, x_shape, axis, keepdims):
 
 
 def logsumexp(x, axis=1):
+
     xp = cuda.get_array_module(x)
     m = x.max(axis=axis, keepdims=True)
     y = x - m

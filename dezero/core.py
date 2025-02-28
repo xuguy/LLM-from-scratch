@@ -379,6 +379,11 @@ def setup_variable():
     Variable.__pow__ = pow
     Variable.__getitem__ = dezero.functions.get_item
 
+    Variable.matmul = dezero.functions.matmul
+    Variable.dot = dezero.functions.matmul
+    Variable.max = dezero.functions.max
+    Variable.min = dezero.functions.min
+
 
 class Parameter(Variable):
     pass

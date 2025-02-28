@@ -1,5 +1,6 @@
 import os
 import subprocess
+import numpy as np
 
 def _dot_var(v, verbose=False):
     dot_var = '{} [label="{}", color=orange, style=filled]\n'
@@ -213,6 +214,36 @@ gy.reshape(shape)
 # gy.reshape([1,3])-> shape (1,3)，变成了一个行向量！
 
 '''
+
+
+def max_backward_shape(x, axis):
+    if axis is None:
+        axis = range(x.ndim)
+
+    elif isinstance(axis, int):
+        axis = (axis,)
+
+    else:
+        axis = axis
+
+    shape = [s if ax not in axis else 1 for ax, s in enumerate(x.shape)]
+    return shape
+
+# 计算 log(exp(x1) + exp(x2) +...+ exp(xn))
+# = x* + log(exp(x1-x*) + exp(x2-x*) +...+ exp(xn-x*))
+def logsumexp(x, axis = 1):
+    '''
+    check:
+    https://en.wikipedia.org/wiki/LogSumExp
+    '''
+    # 防止溢出
+    m = x.max(axis = axis, keepdims = True)
+    y = x - m
+    np.exp(y, out = y)
+    s = y.sum(axis = axis, keepdims = True)
+    np.log(s, out = s)
+    m += s
+    return m
 
 
 

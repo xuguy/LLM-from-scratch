@@ -57,6 +57,75 @@ class Exp(Function):
 def exp(x):
     return Exp()(x)
 
+class Log(Function):
+    def forward(self, x):
+        y = np.log(x)
+        return y
+    
+    def backward(self, gy):
+        x, = self.inputs
+        gx = gy / x
+        return gx
+    
+def log(x):
+    return Log()(x)
+
+# ========= max / min/ clip
+class Max(Function):
+    def __init__(self, axis = None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+
+    def forward(self, x):
+        y = x.max(axis = self.axis, keepdims = self.keepdims)
+        return y
+    # 反向传播的目标是：将梯度 gy（损失对输出的梯度）传播到输入 x 中最大值的位置，其余位置梯度为0。
+    def backward(self, gy):
+        x = self.inputs[0]
+        y = self.outputs[0]()
+
+        shape = utils.max_backward_shape(x, self.axis)
+        gy = reshape(gy, shape)
+        y = reshape(y, shape)
+        # 生成掩码，仅在最大值位置为 True，其他位置为 False
+        # 将梯度 gy 仅保留在最大值位置，其他位置置0。
+        cond = (x.data == y.data)
+        # brodcast_to会将gy在broadcast的地方复制若干次
+        # cond.shape就是原始数据的shape
+        gy = broadcast_to(gy, cond.shape)
+        return gy*cond
+
+
+class Min(Max):
+    def forward(self, x):
+        y = x.min(axis=self.axis, keepdims = self.keepdims)
+        return y
+    
+def max(x, axis = None, keepdims = False):
+    return Max(axis, keepdims)(x)
+
+def min(x, axis=None, keepdims = False):
+    return Min(axis, keepdims)(x)
+
+
+class Clip(Function):
+    def __init__(self, x_min, x_max):
+        self.x_min = x_min
+        self.x_max = x_max
+
+    def forward(self, x):
+        y = np.clip(x, self.x_min, self.x_max)
+        return y
+    
+    def backward(self, gy):
+        x, = self.inputs
+        mask = (x.data >= self.x_min)*(x.data <= self.x_max)
+        gx = gy*mask
+        return gx
+
+def clip(x, x_min, x_max):
+    return Clip(x_min, x_max)(x)
+
 
 #============= shape =================
 
@@ -315,7 +384,7 @@ class Softmax(Function):
     
     def backward(self, gy):
         '''
-        check derivation this is
+        check derivation 
         https://medium.com/towards-data-science/derivative-of-the-softmax-function-and-the-categorical-cross-entropy-loss-ffceefc081d1
         '''
         y = self.outputs[0]()
@@ -323,7 +392,10 @@ class Softmax(Function):
         sumdx = gx.sum(axis = self.axis, keepdims = True)
         gx -= y*sumdx
         return gx
-    
+
+# 默认对行求softmax
+def softmax(x, axis = 1):
+    return Softmax(axis)(x)
 
 
 
@@ -345,3 +417,57 @@ class Sigmoid(Function):
     
 def sigmoid(x):
     return Sigmoid()(x)
+
+
+
+
+# ============ loss function ================
+
+# cross entropy loss
+def softmax_cross_entropy_simple(x, t):
+
+    # 这里的t是模型的输出
+    x, t = as_variable(x), as_variable(t)
+    N = x.shape[0]
+    # 注意，这里softmax(x)以后得到的是和x.shape一样的数据
+    p = softmax(x)
+    p = clip(p, 1e-15, 1.0) # 防止log(0),将p设为大于1e-15
+    log_p = log(p)
+    # 提取出对应于训练数据的模型输出
+    tlop_p = log_p[np.arange(N), t.data]
+    y = -1*sum(tlop_p) / N
+    return y
+
+class SoftmaxCrossEntropy(Function):
+    def forward(self, x, t):
+        # x: model output: indices, not one-hot
+        # N: numbder of data entries
+        # t: true label, not one-hot
+        N = x.shape[0]
+        log_z = utils.logsumexp(x, axis = 1)
+        log_p = x - log_z
+        '''
+        .flatten与.ravel()这两个函数实现的功能一样(展开数组),但在使用过程中flatten()分配了新的内存,但ravel()返回的是一个数组的视图,修改数组的视图，原数组也会被修改，但flatten因为分配了新的内存，因此修改flatten（）后的向量并不会影响原向量
+
+        ravel的目的是将t这个(N,1)数组展平为(N,1),因为t有可能是(N,); t.ravel() 的作用：将 t 展平为一维数组，无论其原始形状是 (N,) 还是 (N, 1),确保 log_p 能正确索引到每个样本的真实类别位置
+        '''
+        log_p = log_p[np.arange(N), t.ravel()]
+        y = -log_p.sum() / np.float32(N)
+        return y
+    
+    def backward(self, gy):
+        x, t = self.inputs
+        N, CLS_NUM = x.shape
+
+        gy *= 1/N
+        y = softmax(x)
+
+        #convert to one-hot
+        # np.eye:  2-D array with ones on the diagonal and zeros elsewhere.
+        t_onehot = np.eye(CLS_NUM, dtype = t.dtype)[t.data]
+        # check https://www.cnblogs.com/chenmoshaoalen/p/18103756
+        y = (y - t_onehot)*gy
+        return y
+    
+def softmax_cross_entropy(x, t):
+    return SoftmaxCrossEntropy()(x, t)
