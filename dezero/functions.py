@@ -185,7 +185,46 @@ class Sum(Function):
 def sum(x, axis = None, keepdims=False):
     return Sum(axis, keepdims)(x)
 
+# GetFunction的注释从后往前看
+class GetItem(Function):
+    def __init__(self, slices):
+        # 获取并保存人为指定的切片位置信息slices
+        self.slices = slices
+    def forward(self, x):
+        #前向传播就是获取输入数据的切片
+        y = x[self.slices]
+        return y
+    def backward(self, gy):
+        x, = self.inputs
+        f = GetItemGrad(self.slices, x.shape)
+        return f(gy)
+    
+class GetItemGrad(Function):
+    def __init__(self, slices, in_shape):
+        self.slices = slices
 
+        # in_shape 输入数据的shape，因为我们在反向传播的时候需要用到这个信息，这样才能正确还原输入的shape
+        self.in_shape = in_shape
+
+    def forward(self, gy):
+        # 目前暂未使用cupy模块适配gpu
+        assert isinstance(gy, np.ndarray), 'gy must be np.ndarray'
+        # 初始化一个gx用来保存数据，这个gx的形状要求和输入数据x一致，数据类型指定为gy.dtype，因为所有继承自Function的函数的outputs都会被as_variable()转换成Variable类型，反倒是输入不一定时Variable类型：
+        # Function：outputs = [Variable(as_array(y)) for y in ys]
+        gx = np.zeros(self.in_shape, dtype = gy.dtype)
+        # add ‘gy’ to ‘gx’ at position ‘self.slices’
+        np.add.at(gx, self.slices,gy)
+        return gx
+    def backward(self, ggx):
+        return get_item(ggx, self.slices)
+    
+def get_item(x, slices):
+    # slices 这个参数就是指定切片的位置
+    f = GetItem(slices)
+    return f(x)
+
+
+# ===== tensor related =====
 # MatMul反向传播的实现
 class MatMul(Function):
     def forward(self, x, W):
@@ -263,8 +302,34 @@ def linear(x, W, b=None):
     return Linear()(x, W, b)
 
 
+class Softmax(Function):
+    def __init__(self, axis = 1):
+        self.axis = axis
+
+    def forward(self, x):
+        # 防止溢出
+        y = x - x.max(axis=self.axis, keepdims = True)
+        y = np.exp(y)
+        y /= y.sum(axis = self.axis, keepdims = True)
+        return y
+    
+    def backward(self, gy):
+        '''
+        check derivation this is
+        https://medium.com/towards-data-science/derivative-of-the-softmax-function-and-the-categorical-cross-entropy-loss-ffceefc081d1
+        '''
+        y = self.outputs[0]()
+        gx = y*gy
+        sumdx = gx.sum(axis = self.axis, keepdims = True)
+        gx -= y*sumdx
+        return gx
+    
+
+
+
 # ======= neural activation function ======
 def sigmoid_simple(x):
+    # x=as_variable(x)确保ndarray被转换为Variable，虽然我觉得没有必要，但还是遵循传统，保留这一步
     x = as_variable(x)
     y = 1/(1+exp(-x))
     return y

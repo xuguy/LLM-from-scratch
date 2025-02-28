@@ -85,7 +85,10 @@ class Variable(object):
             # 下面这行with语句决定是否关闭Function中的计算的反向传播：关闭反向传播保存中间变量+关闭创建计算图，仅保留第一次反向传播的结果，因为gxs=f.backward(*gys)一定会计算导数
             # 第一次反向传播一定会进行，但是第一次反向传播的进行（也即第一次反向传播内部的计算）涉及到的计算在关闭反向传播的状态下进行。
             with using_config('enable_backprop', create_graph):
+
+                # ==== 反向传播在此启动 ====
                 gxs = f.backward(*gys)
+                # 注意，这里传入的gys就是后面所有Functions的backward方法里面的gy
                 if not isinstance(gxs, tuple):
                     gxs = (gxs,)
                 for x, gx in zip(f.inputs, gxs):
@@ -374,6 +377,7 @@ def setup_variable():
     Variable.__truediv__ = div
     Variable.__rtruediv__ = rdiv
     Variable.__pow__ = pow
+    Variable.__getitem__ = dezero.functions.get_item
 
 
 class Parameter(Variable):
