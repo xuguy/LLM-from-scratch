@@ -1,5 +1,5 @@
 import numpy as np
-from dezero.core import Function
+from dezero.core import Function, Variable, as_variable, as_array
 
 '''
 我们会发现dezero.functions里面函数大致分为两类：一类函数的反向传播的计算涉及到了正向传播的输入或者输出，需要保存inputs/outputs；另一类函数的反向传播只对回传过来的梯度gy做变形处理
@@ -471,3 +471,14 @@ class SoftmaxCrossEntropy(Function):
     
 def softmax_cross_entropy(x, t):
     return SoftmaxCrossEntropy()(x, t)
+
+def accuracy(y, t):
+    # 这里将y, t 又手动转化为 Variable是为了更好的兼容性:
+    # 假如一开始传入的是Variable数据，因为我们没有在Variable类的方法中定义argmax，所以没办法用这个函数，我们只能取出Variable类里面的self.data，才能用.argmax，但是取data的这个操作是ndarray不具备的
+    # 假如一开始传入的是ndarray，自然是没问题，不过为了兼容Variable，我们不如一开始就把他们全部转化为Variable
+    y, t = as_variable(y), as_variable(t)
+
+    pred = y.data.argmax(axis = 1).reshape(t.shape)
+    result = (pred == t.data)
+    acc = result.mean() # return np.float->scalar not ndarray, must be turn into ndarray via as_array
+    return Variable(as_array(acc))
