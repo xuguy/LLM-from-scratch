@@ -332,10 +332,11 @@ with no_grad():
     y = square(x)
 '''
 
-
-def as_array(x):
+# gpu adap
+def as_array(x, array_module=np):
+    # 尚未测试：即便array_module改为cp，np.isscalar()仍能够判断cp.ndarray的scalar吗？
     if np.isscalar(x):
-        return np.array(x)
+        return array_module.array(x)
     return x
 # step 21, 运算符重载：为了让Variable能供兼容ndarray的计算
 def as_variable(obj):
@@ -345,27 +346,34 @@ def as_variable(obj):
     if isinstance(obj, Variable):
         return obj
     return Variable(obj)
+
 def neg(x):
     return Neg()(x)
-
+# gpu adap
 def sub(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Sub()(x0, x1)
 
+# gpu adap
 def rsub(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Sub()(x1, x0) # 交换x1和x0
+
+# gpu adap
 def div(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Div()(x0, x1)
 
+# gpu adap
 def rdiv(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Div()(x1, x0)
 
+# gpu adap
 def add(x0, x1):
     # step21 运算符重载：与float和int一起使用
-    x1 = as_array(x1)
+    # 以左边的元素x0为主
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
 
     return Add()(x0, x1)
 
@@ -374,9 +382,9 @@ def square(x):
     f = Square()
     return f(x)
     
-
+# gpu adap
 def mul(x0, x1):
-    x1 = as_array(x1)
+    x1 = as_array(x1, dezero.cuda.get_array_module(x0.data))
     return Mul()(x0, x1)
 
 

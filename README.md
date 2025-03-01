@@ -114,3 +114,18 @@ $$\frac{\partial L}{\partial W} = X^T \cdot \frac{\partial L}{\partial Y} (dout)
 
 ### dezero函数与数据类型规定：
 ![](mdfig\2025-02-24-17-14-51.png)
+
+
+### CuPY adaptation的思路：
+- 不是所有的环境都有`cupy`，因此load `cupy` 时需要判断是否出现`ImportError`，有的话说明`cupy`在当前环境下不可运行。
+- 新建`cuda.py`，将判断环境并load相应模块的功能添加到`cuda.py`，这样以后在别的模块里就不需要复写判断逻辑。`cuda.py`中还包括了一些用来转换数据类型的方法，例如`as_numpy`或者`get_array_module`（用来判断传入的数据类型究竟是`numpy.ndarray`还是`cupy.ndarray`）
+- 将`Variable`类的`init`方法里接受的数据类型由`numpy.ndarray`一个，扩充至`numpy.ndarray`+`cupy.ndarray`；后面再调用`get_array_module`方法判断这个`Variable.data`里的数据究竟是`cupy`还是`numpy`。
+- `Variable`中反向传播方法的一开始需要创建一个和输入的数据具有相同形状的储存变量，这里也需要做适配。最后加上`to_cpu`和`to_gpu`方法，用来改变`self.data`的数据类型
+- 储存参数的`Layer`类：`Layer`类储存的是`Parameter`类，而`Parameter`类继承了`Layer`类，因此也具有和`Layer`类一模一样的方法，不需要做改变。往`Layer`类中添加`to_cpu`和`to_gpu`，用来改变`Layer`中参数的数据类型。
+- 最后，修改`DataLoader`：将`DataLoader`读到的小批次(batch)数据发送到`cupy`，需要改进`__next__`方法：将读到的`x`和`t`转换成对应的`xp.array`，这个才是读取数据的核心方法。最后添加`to_cpu`和`to_gpu`方法，这两个方法仅仅转换`self.gpu`这个tag。
+- 最后的最后，逐个修改所有函数(例如`sin`)的的计算方法（大工程，未完成，进修改了Sin），需要测试。
+- 总结一下，总体思路：
+  - 判断当前环境类型
+  - 判读数据的类型
+  - 需要保存数据的类，添加能改变数据类型的方法
+  - 需要计算模块的类，添加`xp.array`或者`xp.`计算方法(`xp.sin etc.`)
