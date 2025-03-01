@@ -3,7 +3,7 @@ import weakref
 import numpy as np
 import dezero.functions as F
 
-
+# base class
 class Layer:
     # Layer这个基类定义了一些所有Layer都会有的attribute和method，例如为了方便管理参数而设定的params()方法，cleargrads()方法
     def __init__(self):
@@ -56,6 +56,16 @@ class Layer:
         # reset all Parameters' grad
         for param in self.params():
             param.cleargrad()
+
+    # cupy adaptation
+    # 作用对象是Layer中的params()
+    def to_cpu(self):
+        for param in self.params():
+            # param是继承自Variable类的Parameter类，把层中的param拿出来修改后，会直接改动层中的对应的param；且Variable类同Parameter类同样具备to_cpu方法
+            param.to_cpu()
+    def to_gpu(self):
+        for param in self.params():
+            param.to_gpu()
 
 #作为Layer的Linear类，而不是作为函数的Linear类
 class Linear(Layer):

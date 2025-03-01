@@ -3,6 +3,13 @@ import weakref
 import contextlib
 import dezero
 
+try:
+    import cupy
+    array_types = (np.ndarray, cupy.ndarray)
+except ImportError as e:
+    print(e)
+    array_types = (np.ndarray)
+
 class Config:
     enable_backprop = True
 
@@ -41,14 +48,6 @@ class Function:
     
     def backward(self, gy):
         raise NotImplementedError('Function.backward not implemented')
-    
-# try to import cupy for gpu support
-try:
-    import cupy
-    array_types = (np.ndarray, cupy.ndarray)
-except ImportError as e:
-    print(e)
-    array_types = (np.ndarray)
 
 class Variable(object):
 
@@ -56,9 +55,7 @@ class Variable(object):
     __array_priority__ = 10086
     def __init__(self, data, name=None):
         if data is not None:
-            # cupy adaptation, array_types来自外部
-            # 根据cupy是否成功导入，动态判断Variable可接受的数据类型：导入失败：只接受np.ndarray，导入成功：cupy.ndarray或者numpy.ndarray都可以
-            if not isinstance(data, array_types):
+            if not isinstance(data, np.ndarray):
                 raise TypeError('{} is not supported'.format(type(data)))
         self.data = data
         self.name = name
@@ -77,8 +74,7 @@ class Variable(object):
         if self.grad is None:
             # Modified
             # self.grad = np.ones_like(self.data)
-            xp = dezero.cuda.get_array_module(self.data)
-            self.grad = Variable(xp.ones_like(self.data))
+            self.grad = Variable(np.ones_like(self.data))
         funcs = []
         # 用于防止同一个函数被多次添加到funcs中，从而防止一个函数的backward方法被错误地多次调用: 图论有关的算法常用技巧，用来防止cycle
         seen_set = set()
@@ -196,16 +192,6 @@ class Variable(object):
      #使sum函数也可以作为Variable的方法使用
     def sum(self, axis=None, keepdims=False):
         return dezero.functions.sum(self, axis, keepdims)
-    
-    # cupy adaptation：最核心的方法
-    # 下面这2个方法用来修改自身的self.data的数据类型
-    def to_cpu(self):
-        if self.data is not None:
-            self.data = dezero.cuda.as_numpy(self.data)
-
-    def to_gpu(self):
-        if self.data is not None:
-            self.data = dezero.cuda.as_cupy(self.data)
 
 
 # no need to modified add method

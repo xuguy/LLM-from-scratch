@@ -1,4 +1,5 @@
 import numpy as np
+from dezero import cuda
 from dezero.core import Function, Variable, as_variable, as_array
 
 '''
@@ -6,10 +7,14 @@ from dezero.core import Function, Variable, as_variable, as_array
 '''
 
 # ========= basic functions: sin/cos/tanh/exp/log
+
+# cupy adapted
 class Sin(Function):
 
     def forward(self, x):
-        y = np.sin(x)
+        #根据输入的变量的module选择
+        xp = cuda.get_array_module(x)
+        y = xp.sin(x)
         return y
     
     def backward(self, gy):
