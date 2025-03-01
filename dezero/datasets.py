@@ -4,6 +4,8 @@ class Dataset:
     def __init__(self, train=True, transform = None, target_transform = None):
         self.train = train
         self.transform = transform
+
+        # target_transform 对标签进行变换
         self.target_transofrm = target_transform
 
         if self.transform is None:
@@ -90,16 +92,19 @@ class MNIST(Dataset):
 
     def prepare(self):
         # this url has been changed from Yan Lecun from local
-        url = './dezero/MNISTdataset/'
+        # url = './dezero/MNISTdataset/'
+        url = './MNISTdataset/'
+        # url = 'http://yann.lecun.com/exdb/mnist/'
         train_files = {'target': 'train-images-idx3-ubyte.gz',
                        'label': 'train-labels-idx1-ubyte.gz'}
         test_files = {'target': 't10k-images-idx3-ubyte.gz',
                       'label': 't10k-labels-idx1-ubyte.gz'}
-
+        
         files = train_files if self.train else test_files
         data_path = url + files['target']
         label_path = url + files['label']
-
+        print(data_path)
+        print(label_path)
         self.data = self._load_data(data_path)
         self.label = self._load_label(label_path)
 
@@ -128,5 +133,4 @@ class MNIST(Dataset):
     @staticmethod
     def labels():
         return {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9'}
-
 
