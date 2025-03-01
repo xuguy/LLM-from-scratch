@@ -45,6 +45,9 @@ class DataLoader:
         batch_index = self.index[i*batch_size : (i+1)*batch_size]
 
         # 从原始数据self.dataset中取出数据，此时还没有转换成xp
+        # 因为Dataset不支持切片操作，因此只能利用iterator逐个单独取出，放到列表里
+        # 调用Dataset对象的__getitem__方法将得到一个2元tuple
+        # 第一个元时data，第二个元是label
         batch = [self.dataset[i] for i in batch_index]
 
         # 根据是否开启DataLoader中的gpu来选择xp
