@@ -68,6 +68,7 @@ behind `Word2Vec` is that words that appear in similar contexts tend to have sim
 
 ### 前向传播shape变换：
 [参考url](https://blog.csdn.net/m0_60461719/article/details/133951221)
+[参考url2.good](https://blog.csdn.net/sty945/article/details/125135444)
 ![](mdfig\2025-02-11-18-34-19.png)
 
 ### 反向传播：

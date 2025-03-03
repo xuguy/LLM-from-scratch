@@ -374,8 +374,17 @@ def get_file(url, file_name=None):
 # =============================================================================
 # others
 # =============================================================================
-def get_deconv_outsize(size, k, s, p):
-    return s * (size - 1) + k - 2 * p
+def get_deconv_outsize(size, k, stride, padding):
+    '''
+    size (int) – The size of input feature map. It usually is the length of a side of feature map.
+
+    k (int) – The size of deconvolution kernel.
+
+    s (int) – The size of stride.
+
+    p (int) – The size of padding.
+    '''
+    return stride * (size - 1) + k - 2 * padding
 
 
 def get_conv_outsize(input_size, kernel_size, stride, pad):
