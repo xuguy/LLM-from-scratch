@@ -22,11 +22,23 @@ else:
     from dezero.core import test_mode
     from dezero.core import Config
     from dezero.layers import Layer
+    from dezero.models import Model
 
+
+    # from dezero.dataloaders import Dataset
     from dezero.dataloaders import DataLoader
     # visit dataloader: from dezero import DataLoader
 
     import dezero.datasets
+    import dezero.dataloaders
+    import dezero.optimizers
+    import dezero.layers
+    import dezero.functions
+    import dezero.functions_conv
+    
+    import dezero.utils
+    import dezero.cuda
+    # import dezero.transforms
 
 
 # 为什么用dezero.core_simple？这个__init__文件不是已经和core_simple.py在同一个目录下吗？

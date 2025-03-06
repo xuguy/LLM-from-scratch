@@ -2,6 +2,9 @@ import numpy as np
 from dezero import cuda, utils
 import dezero
 from dezero.core import Function, Variable, as_variable, as_array
+# from dezero.core import as_variable
+
+
 
 '''
 我们会发现dezero.functions里面函数大致分为两类：一类函数的反向传播的计算涉及到了正向传播的输入或者输出，需要保存inputs/outputs；另一类函数的反向传播只对回传过来的梯度gy做变形处理
@@ -154,7 +157,7 @@ class Reshape(Function):
     def backward(self, gy):
         return reshape(gy, self.x_shape) # 反向传播时，把gy转换成输入x本来的形状x_shape
 
-from dezero.core import as_variable
+
 
 def reshape(x, shape):
     if x.shape == shape: # 如果输入x的shape和目标shape一致，那么把x转换为Variable类后直接返回
@@ -266,6 +269,18 @@ class Sum(Function):
 
 def sum(x, axis = None, keepdims=False):
     return Sum(axis, keepdims)(x)
+
+
+# average/mean
+def average(x, axis=None, keepdims=False):
+    x = as_variable(x)
+    y = sum(x, axis, keepdims)
+    return y * (y.data.size / x.data.size)
+
+
+mean = average
+
+
 
 # GetFunction的注释从后往前看
 class GetItem(Function):
@@ -458,6 +473,43 @@ def relu(x):
     return ReLU()(x)
 
 
+# when x<0 no longer be 0, instead it has a slope
+class LeakyReLU(Function):
+    def __init__(self, negative_slope):
+        self.negative_slope = negative_slope
+
+    def forward(self, x):
+        # first let y = x
+        y = x.copy()
+        print('reload test2')
+
+        # then mask x<=0, y = x*negative_slope
+        # if slope and x has different dtype, then error
+        '''
+        UFuncTypeError: Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int64') with casting rule 'same_kind': 
+        1. ufunc = universal function of numpy that operate on ndarray object in an element-to-element wise fashion
+
+        2. Casting, also known as type conversion, is a process that converts a variable's data type into another data type. These conversions can be implicit (automatically interpreted) or explicit (using built-in functions).
+
+        3. i also try to fix this ufunc error with 'y = x.astype(self.negative_slope).copy()', but TypeError: Cannot interpret '0.2' as a data type. so make sure input 'x' is np.float type
+        '''
+        y[x <= 0] *=  self.negative_slope
+        return y
+
+    def backward(self, gy):
+        x, = self.inputs
+        # dtype: xp.float32 like
+        # x.data > 0 returns a array of bool
+        mask = (x.data > 0).astype(gy.dtype)
+        mask[mask <= 0] = self.negative_slope
+        gx = gy * mask
+        return gx
+
+# negative_slpoe default to be 0.2
+def leaky_relu(x, slope=0.2):
+    return LeakyReLU(slope)(x)
+
+
 # ============ loss function ================
 
 # cross entropy loss
@@ -536,3 +588,88 @@ def dropout(x, dropout_ratio = 0.5):
         return y
     else:
         return x
+    
+
+
+# ============== batchnorm func =============
+class BatchNorm(Function):
+    def __init__(self, mean, var, decay, eps):
+        self.avg_mean = mean
+        self.avg_var = var
+        self.decay = decay
+        self.eps = eps
+        self.inv_std = None
+
+    def forward(self, x, gamma, beta):
+        assert x.ndim == 2 or x.ndim == 4
+
+        x_ndim = x.ndim
+        if x_ndim == 4:
+            N, C, H, W = x.shape
+            # (N, C, H, W) -> (N*H*W, C)
+            x = x.transpose(0, 2, 3, 1).reshape(-1, C)
+
+        xp = cuda.get_array_module(x)
+
+        if dezero.Config.train:
+            mean = x.mean(axis=0)
+            var = x.var(axis=0)
+            inv_std = 1 / xp.sqrt(var + self.eps)
+            xc = (x - mean) * inv_std
+
+            m = x.size // gamma.size
+            s = m - 1. if m - 1. > 1. else 1.
+            adjust = m / s  # unbiased estimation
+            self.avg_mean *= self.decay
+            self.avg_mean += (1 - self.decay) * mean
+            self.avg_var *= self.decay
+            self.avg_var += (1 - self.decay) * adjust * var
+            self.inv_std = inv_std
+        else:
+            inv_std = 1 / xp.sqrt(self.avg_var + self.eps)
+            xc = (x - self.avg_mean) * inv_std
+        y = gamma * xc + beta
+
+        if x_ndim == 4:
+            # (N*H*W, C) -> (N, C, H, W)
+            y = y.reshape(N, H, W, C).transpose(0, 3, 1, 2)
+        return y
+
+    def backward(self, gy):
+        gy_ndim = gy.ndim
+        if gy_ndim == 4:
+            N, C, H, W = gy.shape
+            gy = gy.transpose(0, 2, 3, 1).reshape(-1, C)
+
+        x, gamma, beta = self.inputs
+        batch_size = len(gy)
+
+        if x.ndim == 4:
+            N, C, H, W = x.shape
+            x = x.transpose(0, 2, 3, 1).reshape(-1, C)
+        mean = x.sum(axis=0) / batch_size
+        xc = (x - mean) * self.inv_std
+
+        gbeta = sum(gy, axis=0)
+        ggamma = sum(xc * gy, axis=0)
+        gx = gy - gbeta / batch_size - xc * ggamma / batch_size
+        gx *= gamma * self.inv_std
+
+        if gy_ndim == 4:
+            gx = gx.reshape(N, H, W, C).transpose(0, 3, 1, 2)
+        return gx, ggamma, gbeta
+
+
+def batch_nrom(x, gamma, beta, mean, var, decay=0.9, eps=2e-5):
+    return BatchNorm(mean, var, decay, eps)(x, gamma, beta)
+    
+# ======== from functions_conv =========
+# 注意，下面这些包的调用只能放到本文件的最后，因为functions中定义了linear这个函数，如果我们在linear这个函数定义之前from dezero.functions_conv中尝试import东西，那么我们翻看functions_conv的头部import语句，里面有一句from dezero.functions import linear, broadcast_to，这相当于从import了一个还没有在functions被定义的函数，造成了circular import
+from dezero.functions_conv import conv2d
+from dezero.functions_conv import conv2dv
+from dezero.functions_conv import deconv2d
+from dezero.functions_conv import conv2d_simple
+from dezero.functions_conv import im2col
+from dezero.functions_conv import col2im
+from dezero.functions_conv import pooling
+from dezero.functions_conv import average_pooling

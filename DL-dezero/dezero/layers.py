@@ -297,6 +297,7 @@ class EmbedID(Layer):
         self.W = Parameter(np.random.randn(in_size, out_size), name='W')
 
     def __call__(self, x):
+        # 传入的x是one-hot表示
         y = self.W[x]
         return y
 

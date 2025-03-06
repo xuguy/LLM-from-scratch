@@ -3,6 +3,7 @@ import weakref, os
 import numpy as np
 import dezero.functions as F
 from dezero import cuda
+from dezero.utils import pair
 
 
 # base class
@@ -23,6 +24,7 @@ class Layer:
         super().__setattr__(name, value)
 
     def __call__(self, *inputs):
+        # 这个call方法作用可以参考Function：call定义层类的计算行为，并规范化输入和输出。
 
         # forward方法将会在继承Layer类的子类中实现
         # 这里可以与Function类的实现做一个对比，Function类中，如果不需要反向传播（例如推理模式），实例不会保留inputs和outputs，仅仅做计算并return outputs，然后所有局部变量（非self.var)就会被删除
@@ -158,3 +160,165 @@ class Linear(Layer):
 
 
     
+# ============ conv2d ===============
+# 此Conv2d是Layer，是专门用来管理卷积层的参数的，注意与functions_conv中的Conv2d区分：该Conv2d定义了卷积核的计算
+class Conv2d(Layer):
+    def __init__(self, out_channels, kernel_size, stride = 1, pad = 0, nobias = False, dtype=np.float32, in_channels=None):
+        super().__init__()
+
+        # 输入数据的channels数：int/None，如果是None，那么in_channels的值将在下面的forward(x)中的x的形状中获得
+        self.in_channels = in_channels
+
+        # 输出数据的channels数: int
+        self.out_channels = out_channels
+
+        # int / (int, int)
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = pad
+
+        # numpy.dtype
+        self.dtype = dtype
+
+        self.W = Parameter(None, name = 'W')
+        
+        # 按照惯例判断是否指定了in_channels(与之对应的是自动分配)，如果未指定了in_channels，那么调用特制的_init_W方法初始化W
+        if in_channels is not None:
+            self._init_W()
+
+        if nobias:
+            self.b = None
+
+        else:
+            self.b = Parameter(np.zeros(out_channels, dtype = dtype), name = 'b')
+
+    # conv2d里面的_init_W允许我们在runtime中自动初始化参数矩阵W，这样我们初始化Conv2d的时候就不需要非得初始化W，节省内存
+    def _init_W(self, xp = np):
+        C, OC = self.in_channels, self.out_channels
+        KH, KW = pair(self.kernel_size)
+
+        # kind of dropout 
+        scale = np.sqrt(1/(C*KH*KW))
+        W_data = xp.random.randn(OC, C, KH, KW).astype(self.dtype)*scale
+
+        self.W.data = W_data
+
+    def forward(self, x):
+        if self.W.data is None:
+            #先获取in_channels的值
+            self.in_channels = x.shape[1]
+            xp = cuda.get_array_module(x)
+            # 再进行初始化
+            self._init_W(xp)
+        # bugged here when updating params
+        # check if F.conv2dv works as expected
+        # y = F.conv2d(x, self.W, self.b, self.stride, self.pad)
+        y = F.conv2dv(x, self.W, self.b, self.stride, self.pad)
+
+        return y
+    
+
+class Conv2dV(Layer):
+    def __init__(self, out_channels, kernel_size, stride = 1, pad = 0, nobias = False, dtype=np.float32, in_channels=None):
+        super().__init__()
+
+        # 输入数据的channels数：int/None，如果是None，那么in_channels的值将在下面的forward(x)中的x的形状中获得
+        self.in_channels = in_channels
+
+        # 输出数据的channels数: int
+        self.out_channels = out_channels
+
+        # int / (int, int)
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.pad = pad
+
+        # numpy.dtype
+        self.dtype = dtype
+
+        self.W = Parameter(None, name = 'W')
+        
+        # 按照惯例判断是否指定了in_channels(与之对应的是自动分配)，如果未指定了in_channels，那么调用特制的_init_W方法初始化W
+        if in_channels is not None:
+            self._init_W()
+
+        if nobias:
+            self.b = None
+
+        else:
+            self.b = Parameter(np.zeros(out_channels, dtype = dtype), name = 'b')
+
+    def _init_W(self, xp = np):
+        C, OC = self.in_channels, self.out_channels
+        KH, KW = pair(self.kernel_size)
+
+        # kind of dropout 
+        scale = np.sqrt(1/(C*KH*KW))
+        W_data = xp.random.randn(OC, C, KH, KW).astype(self.dtype)*scale
+
+        self.W.data = W_data
+
+    def forward(self, x):
+        if self.W.data is None:
+            #先获取in_channels的值
+            self.in_channels = x.shape[1]
+            xp = cuda.get_array_module(x)
+            # 再进行初始化
+            self._init_W(xp)
+
+        y = F.conv2dv(x, self.W, self.b, self.stride, self.pad)
+
+        return y
+
+
+# RNN
+# 注意，所谓的Layer，只是一个保存Variable的地方，他承担的主要角色是 1) 保存Parameter 2）定义数据的传输方式，也即forward，目的是为了形成计算图
+class RNN(Layer):
+    def __init__(self, hidden_size, in_size = None):
+        super().__init__()
+        self.x2h = Linear(hidden_size, in_size = in_size)
+        self.h2h = Linear(hidden_size, in_size = in_size, nobias = True)
+        self.h = None
+
+    def reset_state(self):
+        self.h = None
+
+    def forward(self, x):
+
+        if self.h is None:
+             h_new = F.tanh(self.x2h(x))
+        else:
+            h_new = F.tanh(self.x2h(x) + self.h2h(self.h))
+        # 更新hidden state
+        self.h = h_new
+        return h_new
+    
+
+# ===== batchnorm, direct migrate unverified =========
+class BatchNorm2d(Layer):
+    def __init__(self):
+        super().__init__()
+        # `.avg_mean` and `.avg_var` are `Parameter` objects, so they will be
+        # saved to a file (using `save_weights()`).
+        # But they don't need grads, so they're just used as `ndarray`.
+        self.avg_mean = Parameter(None, name='avg_mean')
+        self.avg_var = Parameter(None, name='avg_var')
+        self.gamma = Parameter(None, name='gamma')
+        self.beta = Parameter(None, name='beta')
+
+    def _init_params(self, x):
+        xp = cuda.get_array_module(x)
+        D = x.shape[1]
+        if self.avg_mean.data is None:
+            self.avg_mean.data = xp.zeros(D, dtype=x.dtype)
+        if self.avg_var.data is None:
+            self.avg_var.data = xp.ones(D, dtype=x.dtype)
+        if self.gamma.data is None:
+            self.gamma.data = xp.ones(D, dtype=x.dtype)
+        if self.beta.data is None:
+            self.beta.data = xp.zeros(D, dtype=x.dtype)
+
+    def __call__(self, x):
+        if self.avg_mean.data is None:
+            self._init_params(x)
+        return F.batch_nrom(x, self.gamma, self.beta, self.avg_mean.data, self.avg_var.data)

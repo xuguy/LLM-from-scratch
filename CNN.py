@@ -186,6 +186,7 @@ class Convolution:
 
         self.db = np.sum(dout, axis=0)
         self.dW = np.dot(self.col.T, dout)
+        print(f'self.col.T:{self.col.T.shape}')
         self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
 
         #dcol就是二维形式的dx，后面把dcol变回4维
@@ -194,4 +195,15 @@ class Convolution:
         dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
 
         return dx
+    
+
+# test convolution:
+N, C, H, W = 1, 5, 15, 15
+OC, (KH, KW) = 8, (3, 3)
+x = np.random.randn(N, C, H, W)
+W = np.random.randn(OC, C, KH, KW)
+conv2d = Convolution(W, b=1., stride=1, pad = 1)
+
+out = conv2d.forward(x)
+print(conv2d.backward(np.ones_like(out)))
 
