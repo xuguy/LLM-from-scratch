@@ -481,7 +481,7 @@ class LeakyReLU(Function):
     def forward(self, x):
         # first let y = x
         y = x.copy()
-        print('reload test2')
+        # print('reload test2')
 
         # then mask x<=0, y = x*negative_slope
         # if slope and x has different dtype, then error
@@ -562,6 +562,103 @@ class SoftmaxCrossEntropy(Function):
 def softmax_cross_entropy(x, t):
     return SoftmaxCrossEntropy()(x, t)
 
+
+
+class SigmoidFocalLoss_noback(Function):
+    def __init__(self, alpha=0.25, gamma=2):
+        
+        self.gamma = gamma
+        self.p = None
+        self.target = None
+        self.p_t = None
+        if not (0 <= alpha <= 1) and alpha != -1:
+            raise ValueError(f"Invalid alpha value: {alpha}. alpha must be in the range [0,1] or -1 for ignore.")
+        self.alpha = alpha
+    def forward(self, *inputs):
+        x, target = inputs  # x 是模型原始输出，target 是真实标签
+        xp = cuda.get_array_module(x)
+        self.p = 1.0 / (1.0 + xp.exp(-x))  # 计算 sigmoid
+        
+        # 数值稳定性处理：避免 log(0)
+        self.p = xp.clip(self.p, 1e-15, 1.0 - 1e-15)
+        
+        # 计算交叉熵损失项
+        ce = - (target * xp.log(self.p) + (1 - target) * xp.log(1 - self.p))
+        self.p_t = self.p * target + (1 - self.p) * (1 - target) # p_t = p if target=1 else 1-p
+        # 计算调制因子 (1 - p_t)^gamma
+        if self.alpha > 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            
+            loss = ce*alpha_t*((1 - self.p_t) ** self.gamma)
+          
+        # modulator = self.alpha * (1 - p_t) ** self.gamma
+        
+        # 计算 focal loss
+        # loss = modulator * ce
+        # self.p = p
+        self.target = target
+        # self.p_t = p_t
+        # print('v1')
+        return loss,
+
+    # def backward(self, grad_outputs):
+    #     # p, target, p_t = self.p, self.target, self.p_t
+    #     xp = cuda.get_array_module(self.p)
+    #     grad_loss = grad_outputs[0]
+    #     # print(grad_loss): 1
+    #     # alpha, gamma = self.alpha, self.gamma
+        
+    #     # 计算梯度 dL/dp
+    #     d_modulator_dp = -self.gamma * self.alpha * (1 - self.p_t) ** (self.gamma - 1) * (2 * self.target - 1)
+    #     d_ce_dp = - (self.target / self.p) + (1 - self.target) / (1 - self.p)
+    #     d_loss_dp = d_modulator_dp * (-xp.log(self.p_t)) + (1 - self.p_t) ** self.gamma * d_ce_dp
+        
+    #     # 计算梯度 dL/dx = dL/dp * dp/dx
+    #     dp_dx = self.p * (1 - self.p)  # sigmoid 导数
+    #     grad_x = grad_loss * d_loss_dp * dp_dx
+        
+    #     return grad_x, None  # 仅对 x 计算梯度，target 无梯度
+
+def sigmoid_focal_loss_noback(x, target, alpha=0.25, gamma=2):
+    return SigmoidFocalLoss_noback(alpha, gamma)(x, target)
+
+
+def sigmoid_focal_loss(x, target, alpha = 0.25, gamma = 2):
+
+
+    xp = cuda.get_array_module(x)
+    p = 1.0 / (1.0 + exp(-x))  # 计算 sigmoid
+    
+    # 数值稳定性处理：避免 log(0)
+    p = clip(p, 1e-15, 1.0 - 1e-15)
+    
+    # 计算交叉熵损失项
+    ce = - (target * log(p) + (1 - target) * log(1 - p))
+    p_t = p * target + (1 - p) * (1 - target) # p_t = p if target=1 else 1-p
+    # 计算调制因子 (1 - p_t)^gamma
+    if alpha > 0:
+        alpha_t = alpha * target + (1 - alpha) * (1 - target)
+        
+        loss = ce*alpha_t*((1 - p_t) ** gamma)
+        
+    loss = mean(loss)
+    # modulator = self.alpha * (1 - p_t) ** self.gamma
+    
+    # 计算 focal loss
+    # loss = modulator * ce
+    # self.p = p
+    # self.target = target
+    # self.p_t = p_t
+    # print('v1')
+    return loss
+
+
+
+
+
+
+
+
 def accuracy(y, t):
     # 这里将y, t 又手动转化为 Variable是为了更好的兼容性:
     # 假如一开始传入的是Variable数据，因为我们没有在Variable类的方法中定义argmax，所以没办法用这个函数，我们只能取出Variable类里面的self.data，才能用.argmax，但是取data的这个操作是ndarray不具备的
@@ -570,8 +667,11 @@ def accuracy(y, t):
 
     pred = y.data.argmax(axis = 1).reshape(t.shape)
     result = (pred == t.data)
-    acc = result.mean() # return np.float->scalar not ndarray, must be turn into ndarray via as_array
+    acc = result.average() # return np.float->scalar not ndarray, must be turn into ndarray via as_array
     return Variable(as_array(acc))
+
+
+
 
 
 # ================ dropout ==================

@@ -100,7 +100,13 @@ class Adam(Optimizer):
     def adjust(self):
         fix1 = 1. - math.pow(self.beta1, self.t)
         fix2 = 1. - math.pow(self.beta2, self.t)
-        return self.lr * math.sqrt(fix2) / fix1
+        # 这里把self.lr放到修正项内部计算有几个好处：
+        '''
+        更清晰的接口设计，符合优化器惯例。
+        简化动态学习率调整（如调度器仅需修改 self.alpha）。
+        集中管理学习率计算逻辑，减少错误风险。
+        '''
+        return  self.lr*math.sqrt(fix2) / fix1
 
     def update_one(self, param):
         xp = cuda.get_array_module(param.data)
@@ -117,4 +123,4 @@ class Adam(Optimizer):
         m += (1 - beta1) * (grad - m)
         v += (1 - beta2) * (grad * grad - v)
         param.data -= self.adjust * m / (xp.sqrt(v) + eps)
-        print('lmao5')
+        # print('v7')
