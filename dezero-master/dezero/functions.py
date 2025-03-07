@@ -574,8 +574,10 @@ class SigmoidFocalLoss_noback(Function):
         if not (0 <= alpha <= 1) and alpha != -1:
             raise ValueError(f"Invalid alpha value: {alpha}. alpha must be in the range [0,1] or -1 for ignore.")
         self.alpha = alpha
+
     def forward(self, *inputs):
         x, target = inputs  # x 是模型原始输出，target 是真实标签
+        self.averaging_factor = 1/x.shape[0]
         xp = cuda.get_array_module(x)
         self.p = 1.0 / (1.0 + xp.exp(-x))  # 计算 sigmoid
         
@@ -589,7 +591,7 @@ class SigmoidFocalLoss_noback(Function):
         if self.alpha > 0:
             alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
             
-            loss = ce*alpha_t*((1 - self.p_t) ** self.gamma)
+            loss = xp.mean(ce*alpha_t*((1 - self.p_t) ** self.gamma),keepdims=True)
           
         # modulator = self.alpha * (1 - p_t) ** self.gamma
         
@@ -597,27 +599,35 @@ class SigmoidFocalLoss_noback(Function):
         # loss = modulator * ce
         # self.p = p
         self.target = target
+        self.alpha_t = alpha_t
         # self.p_t = p_t
         # print('v1')
         return loss,
 
-    # def backward(self, grad_outputs):
-    #     # p, target, p_t = self.p, self.target, self.p_t
-    #     xp = cuda.get_array_module(self.p)
-    #     grad_loss = grad_outputs[0]
-    #     # print(grad_loss): 1
-    #     # alpha, gamma = self.alpha, self.gamma
+    def backward(self, grad_outputs):
+        # p, target, p_t = self.p, self.target, self.p_t
+        xp = cuda.get_array_module(self.p)
+        grad_loss = grad_outputs[0]
+        # print(grad_loss): 1
+        # alpha, gamma = self.alpha, self.gamma
         
-    #     # 计算梯度 dL/dp
-    #     d_modulator_dp = -self.gamma * self.alpha * (1 - self.p_t) ** (self.gamma - 1) * (2 * self.target - 1)
-    #     d_ce_dp = - (self.target / self.p) + (1 - self.target) / (1 - self.p)
-    #     d_loss_dp = d_modulator_dp * (-xp.log(self.p_t)) + (1 - self.p_t) ** self.gamma * d_ce_dp
+        # # 计算梯度 dL/dp
+        # d_modulator_dp = -self.gamma * self.alpha * (1 - self.p_t) ** (self.gamma - 1) * (2 * self.target - 1)
+        # d_ce_dp = - (self.target / self.p) + (1 - self.target) / (1 - self.p)
+        # d_loss_dp = d_modulator_dp * (-xp.log(self.p_t)) + (1 - self.p_t) ** self.gamma * d_ce_dp
         
-    #     # 计算梯度 dL/dx = dL/dp * dp/dx
-    #     dp_dx = self.p * (1 - self.p)  # sigmoid 导数
-    #     grad_x = grad_loss * d_loss_dp * dp_dx
+        # # 计算梯度 dL/dx = dL/dp * dp/dx
+        # dp_dx = self.p * (1 - self.p)  # sigmoid 导数
+        # grad_x = grad_loss * d_loss_dp * dp_dx
         
-    #     return grad_x, None  # 仅对 x 计算梯度，target 无梯度
+        # grad = self.alpha*(1-self.p_t)**(self.gamma)*(self.gamma*self.p_t*xp.log(self.p_t)+self.p_t-1)*(2*self.target-1)
+        # grad_x = grad*grad_loss
+
+        dLdp_t = self.alpha_t*(1-self.p_t)**(self.gamma-1)*(self.gamma*xp.log(self.p_t)+1-(1/self.p_t))
+        dp_tdp = 2*self.target-1
+        dpdx = self.p*(1-self.p)
+        grad_x = dLdp_t*dp_tdp*dpdx*grad_loss*self.averaging_factor # need to consider average when multiple inputs/labels present
+        return grad_x, None  # 仅对 x 计算梯度，target 无梯度
 
 def sigmoid_focal_loss_noback(x, target, alpha=0.25, gamma=2):
     return SigmoidFocalLoss_noback(alpha, gamma)(x, target)
