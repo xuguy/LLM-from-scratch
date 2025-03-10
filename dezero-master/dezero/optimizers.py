@@ -82,13 +82,14 @@ class MomentumSGD(Optimizer):
 # Adam check dezero/optimizers.py
 # adaptive gradient with momentum
 class Adam(Optimizer):
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999, eps=1e-8):
+    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999, eps=1e-8, lmbda = 1e-6):
         super().__init__()
         self.t = 0
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2
         self.eps = eps
+        self.lmbda = lmbda
         self.ms = {}
         self.vs = {}
 
@@ -119,6 +120,7 @@ class Adam(Optimizer):
         m, v = self.ms[key], self.vs[key]
         beta1, beta2, eps = self.beta1, self.beta2, self.eps
         grad = param.grad.data
+        grad += self.lmbda * param.data # weight decay
 
         m += (1 - beta1) * (grad - m)
         v += (1 - beta2) * (grad * grad - v)

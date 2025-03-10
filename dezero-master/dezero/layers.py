@@ -154,7 +154,7 @@ class Linear(Layer):
             self.in_size = x.shape[1]
             xp = cuda.get_array_module(x)
             self._init_W(xp)
-
+        # y = xW+b
         y = F.linear(x, self.W, self.b)
         return y
 
@@ -272,19 +272,32 @@ class Conv2dV(Layer):
 
 
 # RNN
-# 注意，所谓的Layer，只是一个保存Variable的地方，他承担的主要角色是 1) 保存Parameter 2）定义数据的传输方式，也即forward，目的是为了形成计算图
+# 注意，所谓的Layer，只是一个保存Variable的地方，他承担的主要角色是 1) 保存Parameter 2）定义数据的传输方式，也即forward，目的是为了形成计算图，因此不需要backward方法，因为gradient可以通过计算图直接反向传播得到，虽然这样的效率不如直接写一个backward方法，但是具备通用性。
 class RNN(Layer):
     def __init__(self, hidden_size, in_size = None):
         super().__init__()
         self.x2h = Linear(hidden_size, in_size = in_size)
         self.h2h = Linear(hidden_size, in_size = in_size, nobias = True)
+        # 保存隐藏状态，通过隐藏状态与之前的计算图建立连接
+        '''
+        每个时间步的梯度不仅来自当前步的输出损失，还来自下一个时间步的隐藏状态的梯度。因为h_t依赖于h_{t-1}，所以在计算h_{t-1}的梯度时，必须考虑到h_t的梯度会传递到h_{t-1}。也就是说，梯度会沿着时间步反向传播，每个隐藏状态的梯度由两部分组成：当前时间步的输出损失带来的梯度，以及下一个时间步隐藏状态传递回来的梯度。
+
+        隐藏状态在每个时间步被更新，但梯度是通过反向传播按时间步依次计算的。每个时间步的隐藏状态的梯度不仅来自当前步的损失，还来自后续时间步的梯度，这样就能将梯度传递到旧的隐藏状态，从而更新它们的参数。所以，虽然隐藏状态在每个时间步被覆盖，但反向传播过程中，梯度会沿着时间链式传播，从而影响到之前的参数。
+
+        举个例子，假设我们有三个时间步t=1,2,3。计算h3的梯度时，它会影响第三个时间步的损失，同时h3又依赖于h2，所以在反向传播时，h2的梯度会包括来自h3的梯度部分。同理，h1的梯度来自h2的梯度，依此类推。这样，即使每个时间步的隐藏状态被更新了，梯度仍然可以通过链式法则追溯到之前的隐藏状态。
+
+        通过BPTT，每个参数的梯度是所有时间步贡献的累加。的最终梯度是各个时间步通过链式法则传递的梯度之和。
+
+        链式法则的计算见：
+        https://d2l.ai/chapter_recurrent-neural-networks/bptt.html
+        '''
         self.h = None
 
     def reset_state(self):
         self.h = None
 
     def forward(self, x):
-
+        # self.h is None 说明是0时刻，此时还没有hidden state，只有第一个输入数据x，需要初始化一个，初始化的方法就是xW_x
         if self.h is None:
              h_new = F.tanh(self.x2h(x))
         else:

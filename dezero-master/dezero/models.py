@@ -227,23 +227,26 @@ class BottleneckA(Layer):
         # In the original MSRA ResNet, stride=2 is on 1x1 convolution.
         # In Facebook ResNet, stride=2 is on 3x3 convolution.
         stride_1x1, stride_3x3 = (1, stride) if downsample_fb else (stride, 1)
-       
+        #.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0
         self.conv1 = L.Conv2d(mid_channels, 1, stride_1x1, 0,
                               nobias=True)
         self.bn1 = L.BatchNorm2d()
+
         self.conv2 = L.Conv2d(mid_channels, 3, stride_3x3, 1,
                               nobias=True)
         self.bn2 = L.BatchNorm2d()
+
         self.conv3 = L.Conv2d(out_channels, 1, 1, 0, nobias=True)
         self.bn3 = L.BatchNorm2d()
+
         self.conv4 = L.Conv2d(out_channels, 1, stride, 0,
                               nobias=True)
         self.bn4 = L.BatchNorm2d()
 
     def forward(self, x):
-        h1 = F.relu(self.bn1(self.conv1(x)))
-        h1 = F.relu(self.bn2(self.conv2(h1)))
-        h1 = self.bn3(self.conv3(h1))
+        h1 = F.relu(self.bn1(self.conv1(x))) # 1x1
+        h1 = F.relu(self.bn2(self.conv2(h1))) # 3x3
+        h1 = self.bn3(self.conv3(h1)) # 1x1
         h2 = self.bn4(self.conv4(x))
         return F.relu(h1 + h2)
     
@@ -261,8 +264,10 @@ class BottleneckB(Layer):
         
         self.conv1 = L.Conv2d(mid_channels, 1, 1, 0, nobias=True)
         self.bn1 = L.BatchNorm2d()
+
         self.conv2 = L.Conv2d(mid_channels, 3, 1, 1, nobias=True)
         self.bn2 = L.BatchNorm2d()
+        
         self.conv3 = L.Conv2d(in_channels, 1, 1, 0, nobias=True)
         self.bn3 = L.BatchNorm2d()
 

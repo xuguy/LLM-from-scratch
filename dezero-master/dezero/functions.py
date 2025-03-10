@@ -677,7 +677,7 @@ def accuracy(y, t):
 
     pred = y.data.argmax(axis = 1).reshape(t.shape)
     result = (pred == t.data)
-    acc = result.average() # return np.float->scalar not ndarray, must be turn into ndarray via as_array
+    acc = result.mean() # return np.float->scalar not ndarray, must be turn into ndarray via as_array
     return Variable(as_array(acc))
 
 

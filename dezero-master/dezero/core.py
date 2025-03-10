@@ -207,6 +207,21 @@ class Variable(object):
     def to_gpu(self):
         if self.data is not None:
             self.data = dezero.cuda.as_cupy(self.data)
+    
+    def unchain(self):
+        self.creator = None
+
+    def unchain_backward(self):
+        if self.creator is not None:
+            # 从调用unchain_backward的Variable开始回溯该Variable之前的所有计算图的Variable节点，并调用之前的所有Variable节点的unchain方法。问题：切断一个连接就可以达到阻断反向传播的目的了，为什么要回溯所有的Variable？
+            # 可能原因：既然之前的所有Variable都不需要反向传播了，那就释放掉他们的self.creator，多少可以节省一点内存？
+            funcs = [self.creator]
+            while funcs:
+                f = funcs.pop()
+                for x in f.inputs:
+                    if x.creator is not None:
+                        funcs.append(x.creator)
+                        x.unchain()
 
 
 # no need to modified add method
