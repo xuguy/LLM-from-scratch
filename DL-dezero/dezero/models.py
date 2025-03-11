@@ -110,6 +110,11 @@ class VGG16(Model):
         image -= np.array([103.939, 116.779, 123.68], dtype=dtype)
         image = image.transpose((2, 0, 1))
         return image
+    
+# C5L3
+class C5L3:
+    
+
 
 
 # =============================================================================

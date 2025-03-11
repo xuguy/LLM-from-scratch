@@ -33,6 +33,51 @@ class MLP(Model):
             x = self.activation(l(x))
         #最后一层的输出就是前向传播的结果
         return self.layers[-1](x)
+    
+# C5L3
+class C5L3(Model):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = L.Conv2d(128,kernel_size=3, stride=1, pad=1)
+        self.bn1 = L.BatchNorm2d()
+
+        self.conv2 = L.Conv2d(256,kernel_size=3, stride=1, pad=1)
+        self.bn2 = L.BatchNorm2d()
+
+        self.conv3 = L.Conv2d(512,kernel_size=3, stride=1, pad=1)
+        self.bn3 = L.BatchNorm2d()
+
+        self.conv4 = L.Conv2d(512,kernel_size=3, stride=1, pad=1)
+        self.bn4 = L.BatchNorm2d()
+
+        self.conv5 = L.Conv2d(256,kernel_size=3, stride=1, pad=1)
+        self.bn5 = L.BatchNorm2d()
+
+
+
+        self.fc1 = L.Linear(512)
+
+        self.fc2 = L.Linear(256)
+        self.fc3 = L.Linear(128)
+        self.fc4 = L.Linear(10)
+    def forward(self, x):
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.pooling(x, 2, 2)
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = F.relu(self.bn5(self.conv5(x)))
+        x = F.pooling(x, 2, 2)
+
+        # flatten, x.shape[0] is N(batchsize)
+        x = F.reshape(x, (x.shape[0], -1))
+        # print(x.shape)
+        x = F.dropout(F.relu(self.fc1(x)), dropout_ratio=0.3)
+        x = F.dropout(F.relu(self.fc2(x)), dropout_ratio=0.3)
+        x = F.dropout(F.relu(self.fc3(x)), dropout_ratio=0.3)
+        x = self.fc4(x)
+        return x
+
 
 
 # ========== vgg code from books, unverified ===========
