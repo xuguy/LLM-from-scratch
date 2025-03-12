@@ -35,7 +35,7 @@ class MLP(Model):
         return self.layers[-1](x)
     
 # C5L3
-class C5L3(Model):
+class C5L4(Model):
     def __init__(self):
         super().__init__()
         self.conv1 = L.Conv2d(128,kernel_size=3, stride=1, pad=1)
