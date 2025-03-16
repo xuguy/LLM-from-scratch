@@ -1,7 +1,7 @@
 {
-  "id": "uphillroad/dezero-c5l4-test",
-  "title": "dezero C5L4 test",
-  "code_file": "./dlhw1_train.ipynb",
+  "id": "uphillroad/dezero-bsln",
+  "title": "dezero bsln",
+  "code_file": "./dezero_bsln.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": "true",

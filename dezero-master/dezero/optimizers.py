@@ -101,8 +101,8 @@ class Adam(Optimizer):
     def adjust(self):
         fix1 = 1. - math.pow(self.beta1, self.t)
         fix2 = 1. - math.pow(self.beta2, self.t)
-        # 这里把self.lr放到修正项内部计算有几个好处：
         '''
+        这里把self.lr放到修正项内部计算有几个好处：
         更清晰的接口设计，符合优化器惯例。
         简化动态学习率调整（如调度器仅需修改 self.alpha）。
         集中管理学习率计算逻辑，减少错误风险。

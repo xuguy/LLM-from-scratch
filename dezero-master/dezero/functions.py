@@ -459,6 +459,7 @@ def sigmoid(x):
 
 class ReLU(Function):
     def forward(self, x):
+        
         xp = cuda.get_array_module(x)
         y = xp.maximum(x, 0.0)
         return y
@@ -506,8 +507,11 @@ class LeakyReLU(Function):
         return gx
 
 # negative_slpoe default to be 0.2
-def leaky_relu(x, slope=0.2):
-    return LeakyReLU(slope)(x)
+def leaky_relu(x, negative_slope=0.01):
+    return LeakyReLU(negative_slope)(x)
+
+# def leaky_relu(x, slope=0.2):
+#     return LeakyReLU(slope)(x)
 
 
 # ============ loss function ================
@@ -564,7 +568,7 @@ def softmax_cross_entropy(x, t):
 
 
 
-class SigmoidFocalLoss_noback(Function):
+class SigmoidFocalLoss_manual(Function):
     def __init__(self, alpha=0.25, gamma=2):
         
         self.gamma = gamma
@@ -629,8 +633,8 @@ class SigmoidFocalLoss_noback(Function):
         grad_x = dLdp_t*dp_tdp*dpdx*grad_loss*self.averaging_factor # need to consider average when multiple inputs/labels present
         return grad_x, None  # 仅对 x 计算梯度，target 无梯度
 
-def sigmoid_focal_loss_noback(x, target, alpha=0.25, gamma=2):
-    return SigmoidFocalLoss_noback(alpha, gamma)(x, target)
+def sigmoid_focal_loss_manual(x, target, alpha=0.25, gamma=2):
+    return SigmoidFocalLoss_manual(alpha, gamma)(x, target)
 
 
 def sigmoid_focal_loss(x, target, alpha = 0.25, gamma = 2):
@@ -662,6 +666,29 @@ def sigmoid_focal_loss(x, target, alpha = 0.25, gamma = 2):
     # print('v1')
     return loss
 
+
+# ====== SELU ========
+
+class SELU(Function):
+    def __init__(self, alpha = 1.6732632423543773, scale = 1.0507009873554805):
+        self.scale = scale
+        self.alpha = alpha
+
+    def forward(self, x):
+        xp = cuda.get_array_module(x)
+        # print(type(x))
+        y = self.scale*(xp.maximum(x,0) + xp.minimum(0, self.alpha*(xp.exp(x)-1)))
+        return y
+    
+    def backward(self, gy):
+        x, = self.inputs
+        xp = cuda.get_array_module(gy)
+        gy = gy[0]
+        gx = gy*self.scale*xp.where(x.data> 0, 1, self.alpha*exp(x.data))
+        return gx
+
+def selu(x):
+    return SELU()(x)
 
 
 
