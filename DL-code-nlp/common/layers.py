@@ -164,7 +164,7 @@ class Embedding:
         dW, = self.grads
         dW[...] = 0
         if GPU:
-            np.scatter_add(dW, self.idx, dout)
+            cupyx.scatter_add(dW, self.idx, dout)
         else:
             np.add.at(dW, self.idx, dout)
         return None

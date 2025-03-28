@@ -4,6 +4,7 @@ from common.config import GPU
 
 if GPU:
     import cupy as np
+    import cupyx
     np.cuda.set_allocator(np.cuda.MemoryPool().malloc)
 
     print('\033[92m' + '-' * 60 + '\033[0m')

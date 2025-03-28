@@ -82,7 +82,6 @@ class C5L4(Model):
 
 # ========== vgg code from books, unverified ===========
 class VGG16(Model):
-    WEIGHTS_PATH = 'https://github.com/koki0702/dezero-models/releases/download/v0.1/vgg16.npz'
 
     def __init__(self, pretrained=False):
         super().__init__()
@@ -103,10 +102,6 @@ class VGG16(Model):
         self.fc7 = L.Linear(4096)
         self.fc8 = L.Linear(1000)
 
-        # 从 ~/.dezero 中加载数据，如果想改path，到utils.get_file中修改
-        if pretrained:
-            weights_path = utils.get_file(VGG16.WEIGHTS_PATH)
-            self.load_weights(weights_path)
 
     def forward(self, x):
         x = F.relu(self.conv1_1(x))
@@ -133,21 +128,10 @@ class VGG16(Model):
         x = self.fc8(x)
         return x
 
-    @staticmethod
-    def preprocess(image, size=(224, 224), dtype=np.float32):
-        image = image.convert('RGB')
-        if size:
-            image = image.resize(size)
-        image = np.asarray(image, dtype=dtype)
-        image = image[:, :, ::-1]
-        image -= np.array([103.939, 116.779, 123.68], dtype=dtype)
-        image = image.transpose((2, 0, 1))
-        return image
     
 
 # ===== resnet, unverified =====
 class ResNet(Model):
-    WEIGHTS_PATH = 'https://github.com/koki0702/dezero-models/releases/download/v0.1/resnet{}.npz'
 
     def __init__(self, n_layers=152, pretrained=False):
         super().__init__()
@@ -180,10 +164,6 @@ class ResNet(Model):
         self.res5 = BuildingBlock(block[3], 1024, 512, 2048, 2)
         self.fc6 = L.Linear(1000)
         # self.fc6 = L.Linear(10)
-
-        if pretrained:
-            weights_path = utils.get_file(ResNet.WEIGHTS_PATH.format(n_layers))
-            self.load_weights(weights_path)
 
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))

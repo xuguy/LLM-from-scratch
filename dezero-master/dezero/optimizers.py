@@ -23,6 +23,7 @@ class Optimizer:
             f(params)
         # update params
         for param in params:
+            # 在Python中，列表存储的是对象的引用而非拷贝。当优化器将模型的参数（如param.data）存入列表时，列表中的每个元素实际上是一个指向模型中参数对象的指针。因此，对列表中元素属性的修改（如param.data -= lr*param.grad.data）会直接作用于原始参数对象的内存地址。
             # call update_one() method, which will be implemented in child class
             self.update_one(param)
 
