@@ -1,0 +1,15 @@
+{
+  "id": "uphillroad/nlp2-code-run",
+  "title": "nlp2 code run",
+  "code_file": "nlp2_code_run.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["uphillroad/nlp2-src"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -150,6 +150,10 @@ class Dropout:
 
 class Embedding:
     def __init__(self, W):
+        '''
+        ​​self.params = [W]​​：将参数封装为列表，统一所有层的接口，便于模块化管理和优化器处理。
+        ​​W, = self.params​​：通过元组解包简洁地提取参数，同时隐含长度检查，增强代码健壮性。
+        '''
         self.params = [W]
         self.grads = [np.zeros_like(W)]
         self.idx = None

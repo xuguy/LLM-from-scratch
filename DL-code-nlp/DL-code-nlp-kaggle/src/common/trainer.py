@@ -151,6 +151,8 @@ def remove_duplicate(params, grads):
         for i in range(0, L - 1):
             for j in range(i + 1, L):
                 # 在共享权重的情况下
+                # ​参数去重：通过内存地址唯一性，舍弃重复的参数副本；
+                # ​梯度累加：保留所有路径的梯度贡献，确保数学正确性
                 if params[i] is params[j]:
                     grads[i] += grads[j]  # 加上梯度
                     find_flg = True
